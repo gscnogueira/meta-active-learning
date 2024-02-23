@@ -1,0 +1,58 @@
+algos:
+  metric: logloss
+  n_folds: 5
+  n_iter: 1
+  parameters:
+    bagging:
+      n_jobs: -1
+    dummy:
+      strategy: prior
+    random_forest:
+      n_jobs: -1
+  pool:
+  - svc_linear
+  - svc_rbf
+  - random_forest
+  - gradient_boosting
+  - bagging
+  - logistic_regression
+  - mlp
+  resampling: over
+fs:
+  corr_filter: true
+  corr_threshold: 0.95
+  enabled: true
+  max_n_features: 10
+  method: NCA
+  var_filter: true
+  var_threshold: 0
+general:
+  datafile: ../../datasets/1535.csv
+  problem: classification
+  rootdir: .
+  seed: 0
+hpo:
+  enabled: true
+  evals: 10
+  timeout: 90
+isa:
+  adjust_rotation: true
+  engine: python
+  ih_purity: 0.55
+  ih_threshold: 0.4
+  performance_threshold: auto
+measures:
+  list:
+  - kDN
+  - DCP
+  - TD_P
+  - TD_U
+  - CL
+  - CLD
+  - N1
+  - N2
+  - LSC
+  - LSR
+  - Harmfulness
+  - Usefulness
+  - F1
