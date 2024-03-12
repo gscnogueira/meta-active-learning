@@ -53,7 +53,7 @@ class MetaBaseBuilder:
 
         ch = logging.StreamHandler()
         formatter = logging.Formatter(
-            '%(asctime)s - %(levelname)s - %(dataset)s - %(estimator)s::%(strategy)s::%(query)s - %(message)s')
+            '%(asctime)s - %(levelname)s - %(message)s')
         ch.setFormatter(formatter)
 
         self.logger.addHandler(ch)
@@ -63,7 +63,10 @@ class MetaBaseBuilder:
     def metabase(self):
         return pd.DataFrame.from_records(self.__metabase)
 
-    def build(self, dataset: openml.datasets.OpenMLDataset):
+    def fit(self, dataset: openml.datasets.OpenMLDataset):
+        pass
+
+    def build(self):
         # Faz tratamento de dados
         X, y = self.__load_data(dataset)
 
@@ -98,6 +101,7 @@ class MetaBaseBuilder:
                 self.__teach_learner(learner, u_X_pool, u_y_pool,
                                      X_test, y_test)
 
+        self.logger.info(f"{dataset.id}_{dataset.name} - Metabase para  criada.")
         return self.metabase
 
     def __load_data(self, dataset: openml.datasets.OpenMLDataset):
@@ -154,20 +158,16 @@ class MetaBaseBuilder:
     def __teach_learner(self, learner: Union[ActiveLearner, Committee],
                         X_pool, y_pool, X_test, y_test):
 
-        context = {
-            "dataset": f'{self.dataset.id}_{self.dataset.name}',
-            "query": 0,
-            "strategy": learner.query_strategy.__name__,
-            "estimator": self.__get_estimator_name(learner)
-        }
+
+        context_string = (f"{self.dataset.id}_{self.dataset.name}::"
+                          f"{self.__get_estimator_name(learner)}::"
+                          f"{learner.query_strategy.__name__} -")
 
         for idx in range(self.__n_queries):
 
-            context["query"] = idx
-
             query_index, query_instance = learner.query(X_pool)
 
-            self.logger.info("Criando instância...", extra=context)
+            self.logger.info(f"{context_string} Criando instância para query {idx}...")
 
             learner.teach(X=X_pool[query_index], y=y_pool[query_index])
 
@@ -179,10 +179,11 @@ class MetaBaseBuilder:
 
             self.__metabase.append(metainstance)
             
-            self.logger.info("Instância criada.", extra=context)
-
             X_pool = np.delete(X_pool, query_index, axis=0)
             y_pool = np.delete(y_pool, query_index, axis=0)
+
+            self.logger.info(f"{context_string} Instância criada "
+                             f"[L:{self.__get_labeled_pool_size(learner)},U:{y_pool.shape[0]}]")
 
             if np.size(y_pool) == 0:
                 break
@@ -231,3 +232,25 @@ class MetaBaseBuilder:
             return learner.X_training.shape[0]
         if isinstance(learner, Committee):
             return learner.learner_list[0].X_training.shape[0]
+
+
+if __name__  == '__main__':
+
+    from sklearn.svm import SVC
+
+
+    clf_list = [SVC(probability=True)]
+
+    query_strategies = [uncertainty_sampling]
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore')
+        dataset = openml.datasets.get_dataset(40)
+
+    builder = MetaBaseBuilder(estimators=clf_list,
+                              query_strategies=query_strategies,
+                              n_queries=1,
+                              initial_l_size=5,
+                              batch_size=5)
+
+    print(builder.build(dataset))
