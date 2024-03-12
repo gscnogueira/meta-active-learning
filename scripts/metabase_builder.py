@@ -2,6 +2,7 @@ from functools import partial
 from typing import Union
 import warnings
 import logging
+import os
 
 from modAL.models import ActiveLearner, Committee
 from sklearn import metrics
@@ -38,24 +39,25 @@ class MetaBaseBuilder:
                  n_queries=50,
                  batch_size=5,
                  committee_size=3,
-                 initial_l_size=-1, ):
+                 initial_l_size=-1,
+                 download_path=None):
         self.__estimators = estimators
         self.__query_strategies = query_strategies
         self.__n_queries = n_queries
         self.__batch_size = batch_size
         self.__committee_size = committee_size
         self.__initial_l_size = initial_l_size
-
         self.__metabase = list()
 
+        self.download_path = download_path if download_path else '.'
         self.logger = logging.getLogger('MetaBaseBuilder')
-        self.logger.setLevel(logging.INFO)
 
+
+        self.logger.setLevel(logging.INFO)
         ch = logging.StreamHandler()
         formatter = logging.Formatter(
             '%(asctime)s - %(levelname)s - %(message)s')
         ch.setFormatter(formatter)
-
         self.logger.addHandler(ch)
 
     
@@ -64,9 +66,6 @@ class MetaBaseBuilder:
         return pd.DataFrame.from_records(self.__metabase)
 
     def fit(self, dataset: openml.datasets.OpenMLDataset):
-        pass
-
-    def build(self):
         # Faz tratamento de dados
         X, y = self.__load_data(dataset)
 
@@ -85,11 +84,20 @@ class MetaBaseBuilder:
                                                 replace=False)
             labeled_index.extend(additional_index.tolist())
 
-        l_X_pool = X_train[labeled_index]
-        l_y_pool = y_train[labeled_index]
+        self.labeled_index = labeled_index
+        self.X_train, self.X_test = X_train, X_test
+        self.y_train, self.y_test = y_train, y_test
 
-        u_X_pool = np.delete(X_train, labeled_index, axis=0)
-        u_y_pool = np.delete(y_train, labeled_index, axis=0)
+    def build(self , download_path=None):
+
+        l_X_pool = self.X_train[self.labeled_index]
+        l_y_pool = self.y_train[self.labeled_index]
+
+        u_X_pool = np.delete(self.X_train, self.labeled_index, axis=0)
+        u_y_pool = np.delete(self.y_train, self.labeled_index, axis=0)
+
+        self.logger.info(
+            f"{self.dataset.id}_{self.dataset.name} - Iniciando criação de  metabase...")
 
         with warnings.catch_warnings():
 
@@ -99,9 +107,12 @@ class MetaBaseBuilder:
 
             for learner in learners:
                 self.__teach_learner(learner, u_X_pool, u_y_pool,
-                                     X_test, y_test)
+                                     self.X_test,
+                                     self.y_test)
 
-        self.logger.info(f"{dataset.id}_{dataset.name} - Metabase para  criada.")
+        self.logger.info(
+            f"{dataset.id}_{dataset.name} - Metabase para  criada.")
+
         return self.metabase
 
     def __load_data(self, dataset: openml.datasets.OpenMLDataset):
@@ -159,7 +170,7 @@ class MetaBaseBuilder:
                         X_pool, y_pool, X_test, y_test):
 
 
-        context_string = (f"{self.dataset.id}_{self.dataset.name}::"
+        context_string = (f"{self.dataset.id}_{self.dataset.name} - "
                           f"{self.__get_estimator_name(learner)}::"
                           f"{learner.query_strategy.__name__} -")
 
@@ -171,19 +182,23 @@ class MetaBaseBuilder:
 
             learner.teach(X=X_pool[query_index], y=y_pool[query_index])
 
-
             metainstance = self.__create_metainstance(
                 learner=learner,
                 X_pool=X_pool, y_pool=y_pool,
                 X_test=X_test, y_test=y_test)
 
             self.__metabase.append(metainstance)
-            
+
             X_pool = np.delete(X_pool, query_index, axis=0)
             y_pool = np.delete(y_pool, query_index, axis=0)
 
-            self.logger.info(f"{context_string} Instância criada "
-                             f"[L:{self.__get_labeled_pool_size(learner)},U:{y_pool.shape[0]}]")
+            self.logger.info(
+                f"{context_string} Instância criada para query {idx}"
+                f"[L:{self.__get_labeled_pool_size(learner)},U:{y_pool.shape[0]}]")
+
+            self.metabase.to_csv(os.path.join(
+                self.download_path,
+                f"{self.dataset.id}_{self.dataset.name}.csv"))
 
             if np.size(y_pool) == 0:
                 break
@@ -232,25 +247,3 @@ class MetaBaseBuilder:
             return learner.X_training.shape[0]
         if isinstance(learner, Committee):
             return learner.learner_list[0].X_training.shape[0]
-
-
-if __name__  == '__main__':
-
-    from sklearn.svm import SVC
-
-
-    clf_list = [SVC(probability=True)]
-
-    query_strategies = [uncertainty_sampling]
-
-    with warnings.catch_warnings():
-        warnings.filterwarnings('ignore')
-        dataset = openml.datasets.get_dataset(40)
-
-    builder = MetaBaseBuilder(estimators=clf_list,
-                              query_strategies=query_strategies,
-                              n_queries=1,
-                              initial_l_size=5,
-                              batch_size=5)
-
-    print(builder.build(dataset))

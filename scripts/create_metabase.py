@@ -1,4 +1,3 @@
-import os
 import warnings
 from multiprocessing import Pool
 
@@ -10,15 +9,12 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.naive_bayes import GaussianNB
 import openml
-import pandas as pd
 
 from metabase_builder import MetaBaseBuilder
-from config import dataset_ids
 
 
 class SVCLinear(SVC):
     pass
-
 
 
 clf_list = [SVCLinear(kernel='linear', probability=True),
@@ -38,30 +34,24 @@ query_strategies = (MetaBaseBuilder.uncertainty_strategies
 
 def download_metabase(dataset):
 
-    try:
-        builder = MetaBaseBuilder(estimators=clf_list,
-                                  query_strategies=query_strategies,
-                                  n_queries=100,
-                                  initial_l_size=5,
-                                  batch_size=5)
+    builder = MetaBaseBuilder(estimators=clf_list,
+                              query_strategies=query_strategies,
+                              n_queries=5,
+                              initial_l_size=5,
+                              batch_size=5,
+                              download_path="../metabase")
 
-        metabase = builder.build(dataset)
-        
-        file_name = f'{dataset.id}_{dataset.name}.csv'
-        data_path = '../metabase'
-        
-        metabase.to_csv(os.path.join(data_path, file_name))
-
-    except Exception:
-        pass
+    builder.fit(dataset)
+    builder.build()
 
 
 if __name__ == '__main__':
 
+    dataset_ids = [int(line) for line in open('selected_dataset_ids.txt')]
+
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore')
         datasets = openml.datasets.get_datasets(dataset_ids)
-
 
     with Pool() as p:
         results = p.map(download_metabase, datasets)
