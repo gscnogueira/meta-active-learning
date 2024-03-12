@@ -38,18 +38,22 @@ query_strategies = (MetaBaseBuilder.uncertainty_strategies
 
 def download_metabase(dataset):
 
-    builder = MetaBaseBuilder(estimators=clf_list,
-                              query_strategies=query_strategies,
-                              n_queries=100,
-                              initial_l_size=5,
-                              batch_size=5)
+    try:
+        builder = MetaBaseBuilder(estimators=clf_list,
+                                  query_strategies=query_strategies,
+                                  n_queries=100,
+                                  initial_l_size=5,
+                                  batch_size=5)
 
-    metabase = builder.build(dataset)
+        metabase = builder.build(dataset)
+        
+        file_name = f'{dataset.id}_{dataset.name}.csv'
+        data_path = '../metabase'
+        
+        metabase.to_csv(os.path.join(data_path, file_name))
 
-    file_name = f'{dataset.id}_{dataset.name}.csv'
-    data_path = '../metabase'
-    
-    metabase.to_csv(os.path.join(data_path, file_name))
+    except Exception:
+        pass
 
 
 if __name__ == '__main__':
