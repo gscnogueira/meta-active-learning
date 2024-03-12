@@ -1,3 +1,4 @@
+import random
 import openml
 import warnings 
 from multiprocessing import Pool
@@ -63,11 +64,21 @@ def test_dataset(dataset_id):
 
 if __name__ == '__main__':
 
+    N_DATASETS = 100
+
     dataset_ids = get_dataset_ids()
 
     with Pool() as pool:
         results = pool.map(test_dataset, dataset_ids)
 
-    problematic_ids = [id for id, result in zip(dataset_ids, results)
-                       if not result]
-    print(problematic_ids)
+    filtered_ids = [id for id, result in zip(dataset_ids, results)
+                    if result]
+
+    random.seed(42)
+
+    selected_ids = sorted(random.sample(filtered_ids, N_DATASETS))
+
+    with open('selected_dataset_ids.txt', 'w') as arquivo:
+        for id in selected_ids:
+            arquivo.write(str(id) + '\n')
+
