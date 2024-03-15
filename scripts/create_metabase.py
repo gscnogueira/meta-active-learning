@@ -36,13 +36,19 @@ def download_metabase(dataset):
 
     builder = MetaBaseBuilder(estimators=clf_list,
                               query_strategies=query_strategies,
-                              n_queries=5,
+                              n_queries=100,
                               initial_l_size=5,
                               batch_size=5,
-                              download_path="../metabase")
+                              download_path="/dev/shm/metabase")
 
-    builder.fit(dataset)
-    builder.build()
+    try:
+
+        builder.fit(dataset)
+        builder.build()
+
+    except Exception as e:
+        print(e)
+        return 
 
 
 if __name__ == '__main__':

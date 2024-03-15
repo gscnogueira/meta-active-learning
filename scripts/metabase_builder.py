@@ -174,9 +174,17 @@ class MetaBaseBuilder:
                           f"{self.__get_estimator_name(learner)}::"
                           f"{learner.query_strategy.__name__} -")
 
+        csv_file_name = os.path.join(self.download_path,
+                                     f"{self.dataset.id}_{self.dataset.name}.csv")
+
         for idx in range(self.__n_queries):
 
-            query_index, query_instance = learner.query(X_pool)
+
+            if (size := np.size(y_pool)) <  self.__batch_size:
+                query_index = np.arange(size)
+            else:
+                query_index, _ = learner.query(X_pool)
+
 
             self.logger.info(f"{context_string} Criando instância para query {idx}...")
 
@@ -196,12 +204,16 @@ class MetaBaseBuilder:
                 f"{context_string} Instância criada para query {idx}"
                 f"[L:{self.__get_labeled_pool_size(learner)},U:{y_pool.shape[0]}]")
 
-            self.metabase.to_csv(os.path.join(
-                self.download_path,
-                f"{self.dataset.id}_{self.dataset.name}.csv"))
 
             if np.size(y_pool) == 0:
                 break
+
+            # Salva a cada 10 queries para não perder o progresso
+            if idx%10 == 0:
+                self.metabase.to_csv(csv_file_name)
+
+        self.metabase.to_csv(csv_file_name)
+        self.logger.info(f"{context_string} Todas as instâncias foram criadas.")
 
     def __create_metainstance(self, learner, X_pool, y_pool, X_test, y_test):
         scores = self.__eval_learner(learner, X_test, y_test)
@@ -247,3 +259,44 @@ class MetaBaseBuilder:
             return learner.X_training.shape[0]
         if isinstance(learner, Committee):
             return learner.learner_list[0].X_training.shape[0]
+
+if __name__ == '__main__':
+
+    from sklearn.svm import SVC
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.neighbors import KNeighborsClassifier
+    from sklearn.neural_network import MLPClassifier
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.tree import DecisionTreeClassifier
+    from sklearn.naive_bayes import GaussianNB
+    import openml
+
+
+    class SVCLinear(SVC):
+        pass
+
+    clf_list = [SVCLinear(kernel='linear', probability=True),
+                SVC(probability=True),
+                RandomForestClassifier(),
+                KNeighborsClassifier(),
+                MLPClassifier(),
+                LogisticRegression(),
+                DecisionTreeClassifier(),
+                GaussianNB(),
+                ]
+
+    query_strategies = (MetaBaseBuilder.uncertainty_strategies
+            + MetaBaseBuilder.disagreement_strategies)
+
+    builder = MetaBaseBuilder(estimators=clf_list,
+                              query_strategies=query_strategies,
+                              n_queries=100,
+                              initial_l_size=5,
+                              batch_size=5,)
+    
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore')
+        dataset = openml.datasets.get_dataset(44344)
+
+    builder.fit(dataset)
+    builder.build()
