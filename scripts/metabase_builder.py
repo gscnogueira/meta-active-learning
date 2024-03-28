@@ -104,7 +104,7 @@ class MetaBaseBuilder:
             warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
             learners = self.__build_learners(l_X_pool, l_y_pool)
-
+            
             for learner in learners:
                 self.__teach_learner(learner, u_X_pool, u_y_pool,
                                      self.X_test,
@@ -180,7 +180,9 @@ class MetaBaseBuilder:
         for idx in range(self.__n_queries):
 
 
-            if (size := np.size(y_pool)) <  self.__batch_size:
+            if (size := np.size(y_pool)) ==  self.__batch_size + 1:
+                query_index = np.arange(size)
+            elif (size := np.size(y_pool)) <  self.__batch_size:
                 query_index = np.arange(size)
             else:
                 query_index, _ = learner.query(X_pool)
