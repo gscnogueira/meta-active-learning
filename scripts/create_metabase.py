@@ -41,24 +41,23 @@ def download_metabase(dataset):
                               batch_size=5,
                               download_path="/dev/shm/metabase")
 
+    try:
 
-    builder.fit(dataset)
-    builder.build()
+        builder.fit(dataset)
+        builder.build()
+
+    except Exception as e:
+        print(e)
+        return 
 
 
 if __name__ == '__main__':
 
-    # dataset_ids = [int(line) for line in open('selected_dataset_ids.txt')]
-    dataset_ids = [801]
-
+    dataset_ids = [int(line) for line in open('selected_dataset_ids.txt')]
 
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore')
         datasets = openml.datasets.get_datasets(dataset_ids)
 
-
-    for dataset in datasets:
-        download_metabase(dataset)
-
-    # with Pool() as p:
-    #     results = p.map(download_metabase, datasets)
+    with Pool() as p:
+        results = p.map(download_metabase, datasets)
