@@ -1,12 +1,14 @@
 import pickle as pkl
 import warnings
 from functools import partial
+from itertools import product
 
 from tqdm import tqdm
 from modAL.models import ActiveLearner, Committee
 from sklearn.compose import ColumnTransformer
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder
+from sklearn.metrics import f1_score
 from pymfe.mfe import MFE
 import numpy as np
 import pandas as pd
@@ -27,6 +29,8 @@ class ActiveLearningExperiment:
                               b.uncertainty_batch_sampling]
     
     def __init__(self, dataset_id, l_size, random_state=None):
+
+        self.dataset_id = dataset_id
 
         X, y = self.__load_data(dataset_id)
 
@@ -88,7 +92,9 @@ class ActiveLearningExperiment:
             u_X_pool = np.delete(u_X_pool, query_index, axis=0)
             u_y_pool = np.delete(u_y_pool, query_index, axis=0)
 
-            score = learner.score(self.X_test, self.y_test)
+            y_pred = learner.predict(self.X_test)
+
+            score = f1_score(self.y_test, y_pred, average='macro')
             scores.append(score)
 
         return scores
@@ -132,7 +138,7 @@ class ActiveLearningExperiment:
 
         return scores
 
-    def __topline_query(self, estimator,
+    def _topline_query(self, estimator,
                         l_pool, u_pool,
                         query_strategies,
                         batch_size, committee_size):
@@ -149,6 +155,7 @@ class ActiveLearningExperiment:
 
         best_score = 0
         best_sample = None
+        best_strategy = None
         u_X_pool, u_y_pool = u_pool
 
         u_pool_size = np.size(u_y_pool)
@@ -166,8 +173,9 @@ class ActiveLearningExperiment:
             if score > best_score:
                 best_score = score
                 best_sample = query_index
+                best_strategy = query_strategies[i]
 
-        return best_sample, best_score
+        return best_sample, best_score, best_strategy.__name__
 
     def __gen_learner(self, query_strategy, committee_size, batch_size, **kwargs):
 
@@ -182,8 +190,15 @@ class ActiveLearningExperiment:
 
             query_strategy = partial(query_strategy, n_instances=batch_size)
 
-            learner_list = [ActiveLearner(**kwargs)
-                            for _ in range(committee_size)]
+            learner_list = []
+
+            for _ in range(committee_size):
+                try:
+                    learner = ActiveLearner(bootstrap_init=True, **kwargs)
+                except ValueError:
+                    learner = ActiveLearner(**kwargs)
+
+                learner_list.append(learner)
 
             learner = Committee(learner_list=learner_list,
                                 query_strategy=query_strategy)
@@ -211,10 +226,77 @@ class ActiveLearningExperiment:
 
         return X, y
 
+class MetaBaseBuilder(ActiveLearningExperiment):
+    def run(self, estimator, n_queries,
+            query_strategies: list,
+            batch_size=5, committee_size=3):
+
+        l_X_pool = self.X_train[self.labeled_index]
+        l_y_pool = self.y_train[self.labeled_index]
+
+        u_X_pool = np.delete(self.X_train, self.labeled_index, axis=0)
+        u_y_pool = np.delete(self.y_train, self.labeled_index, axis=0)
+
+        scores = []
+
+        meta_examples = []
+
+        for idx in range(n_queries):
+
+            u_pool_size = np.size(u_y_pool)
+
+            if u_pool_size <= 0:
+                break
+
+            # extração de metafeatures dos dados não rotulados
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore')
+                mfe = MFE(groups='all')
+                mfe.fit(u_X_pool)
+                mf_names, mf_values = mfe.extract()
+
+            mfs = pd.Series(data=mf_values, index=mf_names)
+
+            query_index, score, strategy_name = self._topline_query(
+                estimator=estimator,
+                query_strategies=query_strategies,
+                l_pool=(l_X_pool, l_y_pool),
+                u_pool=(u_X_pool, u_y_pool),
+                batch_size=5,
+                committee_size=committee_size)
+
+            mfs['dataset_id'] = int(self.dataset_id)
+            mfs['query_number'] = idx
+            mfs['estimator'] = type(estimator).__name__
+            mfs['best_strategy'] = strategy_name
+            mfs['best_score'] = score
+
+            meta_examples.append(mfs)
+
+            new_X, new_y = u_X_pool[query_index], u_y_pool[query_index]
+
+            l_X_pool = np.append(l_X_pool, new_X, axis=0)
+            l_y_pool = np.append(l_y_pool, new_y, axis=0)
+
+            u_X_pool = np.delete(u_X_pool, query_index, axis=0)
+            u_y_pool = np.delete(u_y_pool, query_index, axis=0)
+
+            scores.append(score)
+
+        return pd.DataFrame(meta_examples).set_index('query_number')
+
 
 if __name__ == "__main__":
 
+    import os
+    import logging
+    from multiprocessing import Pool
+
     from sklearn.svm import SVC
+    from sklearn.naive_bayes import GaussianNB
+    from sklearn.ensemble import RandomForestClassifier
+
     from modAL import uncertainty as u
     from modAL import disagreement as d
     from modAL import batch as b
@@ -222,6 +304,7 @@ if __name__ == "__main__":
     exp = ActiveLearningExperiment(dataset_id=991,
                                    random_state=42,
                                    l_size=5)
+
 
     query_strategies = [u.uncertainty_sampling,
                         u.margin_sampling,
@@ -231,8 +314,39 @@ if __name__ == "__main__":
                         d.consensus_entropy_sampling,
                         d.vote_entropy_sampling]
 
-    topline_scores = exp.run_topline(estimator=SVC(probability=True),
-                                     query_strategies=query_strategies,
-                                     n_queries=100,
-                                     batch_size=5)
-    print(topline_scores)
+
+    dataset_ids = {int(f.split('_')[0])
+                   for f in os.listdir('../../metabase/')
+                   if f.endswith('.csv')}
+
+    dataset_ids.update(int(line) for line in
+                       open('../../scripts/selected_dataset_ids.txt'))
+    dataset_ids = [44715]
+
+    clf_list = [SVC(probability=True), RandomForestClassifier()]
+
+    init_args = {"random_state": 42, "l_size": 5}
+    run_args = {"query_strategies": query_strategies,
+                "n_queries": 3,
+                "batch_size": 5}
+
+    logging.basicConfig(level=logging.WARNING,
+                        format='%(asctime)s:%(levelname)s:%(message)s',
+                        filename='active_learning.log')
+
+    def gen_metabase(args):
+        try:
+            logging.warning(f'[{args}] Iniciando construção de metabase.')
+            dataset_id, estimator = args
+            builder = MetaBaseBuilder(dataset_id=dataset_id, **init_args)
+            df = builder.run(estimator=SVC(probability=True), **run_args)
+            df.to_csv(f'{dataset_id}_{type(estimator).__name__}.csv')
+            logging.warning(f'[{args}] Metabase construida.')
+        except Exception as e:
+            logging.error(f'[{args}] Ocorreu um erro: {e}')
+
+
+
+
+    with Pool() as p:
+        result = p.map(gen_metabase, product(dataset_ids, clf_list))
