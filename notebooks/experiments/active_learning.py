@@ -36,15 +36,22 @@ class ActiveLearningExperiment:
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y)
 
+        self.classes_ = np.unique(y)
+
         # Faz com que inicialmente haja uma instância rotulada por classe
         labeled_index = [
             np.random.RandomState(random_state).choice(np.where(y_train == cls)[0])
             for cls in np.unique(y_train)]
 
-        if len(labeled_index) < l_size:
+        if (n_classes := len(labeled_index)) < l_size:
+
+            possible_choices = [i for i in range(len(y_train))
+                               if i not in labeled_index]
 
             additional_index = np.random.RandomState(random_state).choice(
-                len(y_train), size=l_size, replace=False)
+                possible_choices,
+                size=l_size - n_classes,
+                replace=False)
 
             labeled_index.extend(additional_index.tolist())
 
@@ -118,6 +125,7 @@ class ActiveLearningExperiment:
             if u_pool_size <= 0:
                 break
 
+            import pdb; pdb.set_trace()
             query_index, score = self.__topline_query(
                 estimator=estimator,
                 query_strategies=query_strategies,
@@ -195,6 +203,13 @@ class ActiveLearningExperiment:
             for _ in range(committee_size):
                 try:
                     learner = ActiveLearner(bootstrap_init=True, **kwargs)
+                    if not np.array_equal(self.classes_,
+                                          learner.estimator.classes_):
+                        # Não há um número de instâncias suficiente
+                        # para o uso de bootstrap. Portanto,  o procedimento
+                        # padrão será realizado
+                        raise ValueError
+
                 except ValueError:
                     learner = ActiveLearner(**kwargs)
 
@@ -202,6 +217,7 @@ class ActiveLearningExperiment:
 
             learner = Committee(learner_list=learner_list,
                                 query_strategy=query_strategy)
+
             return learner
 
         else:
@@ -230,7 +246,7 @@ class MetaBaseBuilder(ActiveLearningExperiment):
     def run(self, estimator, n_queries,
             query_strategies: list,
             batch_size=5, committee_size=3):
-
+        
         l_X_pool = self.X_train[self.labeled_index]
         l_y_pool = self.y_train[self.labeled_index]
 
@@ -249,7 +265,6 @@ class MetaBaseBuilder(ActiveLearningExperiment):
                 break
 
             # extração de metafeatures dos dados não rotulados
-
             with warnings.catch_warnings():
                 warnings.filterwarnings('ignore')
                 mfe = MFE(groups='all')
@@ -319,9 +334,11 @@ if __name__ == "__main__":
                    for f in os.listdir('../../metabase/')
                    if f.endswith('.csv')}
 
+    
     dataset_ids.update(int(line) for line in
                        open('../../scripts/selected_dataset_ids.txt'))
-    dataset_ids = [44715]
+
+    dataset_ids = [40708]
 
     clf_list = [SVC(probability=True), RandomForestClassifier()]
 
@@ -339,14 +356,23 @@ if __name__ == "__main__":
             logging.warning(f'[{args}] Iniciando construção de metabase.')
             dataset_id, estimator = args
             builder = MetaBaseBuilder(dataset_id=dataset_id, **init_args)
+
             df = builder.run(estimator=SVC(probability=True), **run_args)
-            df.to_csv(f'{dataset_id}_{type(estimator).__name__}.csv')
+
+            try:
+                os.mkdir(f'{dataset_id}')
+            except FileExistsError:
+                pass
+
+            df.to_csv(f'{dataset_id}/{type(estimator).__name__}.csv')
             logging.warning(f'[{args}] Metabase construida.')
-        except Exception as e:
-            logging.error(f'[{args}] Ocorreu um erro: {e}')
+        finally:
+            pass
 
+        # except Exception as e:
+        #     logging.error(f'[{args}] Ocorreu um erro: {e}')
 
+    result = list(map(gen_metabase, product(dataset_ids, clf_list)))
 
-
-    with Pool() as p:
-        result = p.map(gen_metabase, product(dataset_ids, clf_list))
+    # with Pool() as p:
+        # result = p.map(gen_metabase, product(dataset_ids, clf_list))
