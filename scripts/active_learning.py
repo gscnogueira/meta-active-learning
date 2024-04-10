@@ -5,10 +5,12 @@ from itertools import product
 
 from tqdm import tqdm
 from modAL.models import ActiveLearner, Committee
+from sklearn.cluster import KMeans
 from sklearn.compose import ColumnTransformer
+from sklearn.exceptions import ConvergenceWarning
+from sklearn.metrics import f1_score, silhouette_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder
-from sklearn.metrics import f1_score
 from pymfe.mfe import MFE
 import numpy as np
 import pandas as pd
@@ -171,7 +173,7 @@ class ActiveLearningExperiment:
         for i, learner in enumerate(active_learners):
 
             query_index = (learner.query(u_X_pool)[0]
-                           if u_pool_size > batch_size + 1
+                           if u_pool_size > batch_size + 2
                            else np.arange(u_pool_size))
 
             learner.teach(X=u_X_pool[query_index], y=u_y_pool[query_index])
@@ -243,6 +245,9 @@ class ActiveLearningExperiment:
         return X, y
 
 class MetaBaseBuilder(ActiveLearningExperiment):
+
+    MAX_NUMBER_OF_CLASSES = 5
+
     def run(self, estimator, n_queries,
             query_strategies: list,
             batch_size=5, committee_size=3):
@@ -264,22 +269,25 @@ class MetaBaseBuilder(ActiveLearningExperiment):
             if u_pool_size <= 0:
                 break
 
-            # extração de metafeatures dos dados não rotulados
+            # Extração de metafeatures dos dados não rotulados
+
+            # Extração de medidas não supervisionadas
+            uns_mfs = self.__extract_unsupervised_mfs(u_X_pool)
+
+            clst_mfs = self.__extract_clustering_mfs(u_X_pool)
+
+            mfs = pd.concat([uns_mfs, clst_mfs])
+
             with warnings.catch_warnings():
-                warnings.filterwarnings('ignore')
-                mfe = MFE(groups='all')
-                mfe.fit(u_X_pool)
-                mf_names, mf_values = mfe.extract()
 
-            mfs = pd.Series(data=mf_values, index=mf_names)
-
-            query_index, score, strategy_name = self._topline_query(
-                estimator=estimator,
-                query_strategies=query_strategies,
-                l_pool=(l_X_pool, l_y_pool),
-                u_pool=(u_X_pool, u_y_pool),
-                batch_size=5,
-                committee_size=committee_size)
+                warnings.filterwarnings("ignore", category=ConvergenceWarning)
+                query_index, score, strategy_name = self._topline_query(
+                    estimator=estimator,
+                    query_strategies=query_strategies,
+                    l_pool=(l_X_pool, l_y_pool),
+                    u_pool=(u_X_pool, u_y_pool),
+                    batch_size=5,
+                    committee_size=committee_size)
 
             mfs['dataset_id'] = int(self.dataset_id)
             mfs['query_number'] = idx
@@ -302,6 +310,55 @@ class MetaBaseBuilder(ActiveLearningExperiment):
         return pd.DataFrame(meta_examples).set_index('query_number')
 
 
+    def __extract_unsupervised_mfs(self, X):
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore')
+            mfe = MFE(groups='all')
+            mfe.fit(X)
+            mf_names, mf_values = mfe.extract()
+
+        mfs = pd.Series(data=mf_values, index=mf_names)
+        return mfs
+
+    def __extract_clustering_mfs(self, X):
+
+        clusterer = self.__get_best_cluster(X)
+
+
+        y = clusterer.labels_
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore')
+            mfe = MFE(groups='clustering')
+            mfe.fit(X, y)
+            mf_names, mf_values = mfe.extract()
+
+        mfs = pd.Series(data=mf_values, index=mf_names)
+        return mfs
+
+    def __get_best_cluster(self, X):
+
+
+        range_n_clusters = range(2, min(X.shape[0]+1, self.MAX_NUMBER_OF_CLASSES+1))
+
+        max_score = -10
+        best_clusterer = None
+
+        for n_clusters in range_n_clusters:
+
+            clusterer = KMeans(n_clusters=n_clusters, n_init='auto')
+            cluster_labels = clusterer.fit_predict(X)
+
+            current_score = silhouette_score(X, cluster_labels)
+
+            if current_score > max_score:
+                max_score = current_score
+                best_clusterer = clusterer
+
+        return best_clusterer
+
+
 if __name__ == "__main__":
 
     import os
@@ -309,16 +366,46 @@ if __name__ == "__main__":
     from multiprocessing import Pool
 
     from sklearn.svm import SVC
-    from sklearn.naive_bayes import GaussianNB
     from sklearn.ensemble import RandomForestClassifier
+    from sklearn.neighbors import KNeighborsClassifier
+    from sklearn.neural_network import MLPClassifier
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.tree import DecisionTreeClassifier
+    from sklearn.naive_bayes import GaussianNB
 
     from modAL import uncertainty as u
     from modAL import disagreement as d
     from modAL import batch as b
 
-    exp = ActiveLearningExperiment(dataset_id=991,
-                                   random_state=42,
-                                   l_size=5)
+    DOWNLOAD_PATH = 'metabase/'
+
+    class SVCLinear(SVC):
+        pass
+
+    def gen_metabase(args):
+        try:
+            logging.warning(f'[{args}] Iniciando construção de metabase.')
+            dataset_id, estimator = args
+            builder = MetaBaseBuilder(dataset_id=dataset_id, **init_args)
+
+            df = builder.run(estimator=estimator, **run_args)
+
+            try:
+                os.mkdir(os.path.join(DOWNLOAD_PATH, str(dataset_id)))
+            except FileExistsError:
+                pass
+
+            df.to_csv(os.path.join(
+                DOWNLOAD_PATH,
+                str(dataset_id),
+                f'{type(estimator).__name__}.csv' ))
+
+            logging.warning(f'[{args}] Metabase construida.')
+
+        finally:
+            pass
+        # except Exception as e:
+        #     logging.error(f'[{args}] Ocorreu um erro: {e}')
 
 
     query_strategies = [u.uncertainty_sampling,
@@ -331,48 +418,34 @@ if __name__ == "__main__":
 
 
     dataset_ids = {int(f.split('_')[0])
-                   for f in os.listdir('../../metabase/')
+                   for f in os.listdir('../metabase/')
                    if f.endswith('.csv')}
 
-    
+
     dataset_ids.update(int(line) for line in
-                       open('../../scripts/selected_dataset_ids.txt'))
+                       open('selected_dataset_ids.txt'))
 
-    dataset_ids = [40708]
+    clf_list = [SVCLinear(kernel='linear', probability=True),
+                SVC(probability=True),
+                RandomForestClassifier(),
+                KNeighborsClassifier(),
+                MLPClassifier(),
+                LogisticRegression(),
+                DecisionTreeClassifier(),
+                GaussianNB()]
 
-    clf_list = [SVC(probability=True), RandomForestClassifier()]
 
     init_args = {"random_state": 42, "l_size": 5}
     run_args = {"query_strategies": query_strategies,
-                "n_queries": 3,
+                "n_queries": 100,
                 "batch_size": 5}
 
     logging.basicConfig(level=logging.WARNING,
                         format='%(asctime)s:%(levelname)s:%(message)s',
-                        filename='active_learning.log')
+                        # filename='active_learning.log'
+                        )
 
-    def gen_metabase(args):
-        try:
-            logging.warning(f'[{args}] Iniciando construção de metabase.')
-            dataset_id, estimator = args
-            builder = MetaBaseBuilder(dataset_id=dataset_id, **init_args)
+    # result = list(map(gen_metabase, product(dataset_ids, clf_list)))
 
-            df = builder.run(estimator=SVC(probability=True), **run_args)
-
-            try:
-                os.mkdir(f'{dataset_id}')
-            except FileExistsError:
-                pass
-
-            df.to_csv(f'{dataset_id}/{type(estimator).__name__}.csv')
-            logging.warning(f'[{args}] Metabase construida.')
-        finally:
-            pass
-
-        # except Exception as e:
-        #     logging.error(f'[{args}] Ocorreu um erro: {e}')
-
-    result = list(map(gen_metabase, product(dataset_ids, clf_list)))
-
-    # with Pool() as p:
-        # result = p.map(gen_metabase, product(dataset_ids, clf_list))
+    with Pool() as p:
+        result = p.map(gen_metabase, product(dataset_ids, clf_list))
