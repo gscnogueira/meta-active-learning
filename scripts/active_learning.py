@@ -78,7 +78,7 @@ class ActiveLearningExperiment:
         args['X_training'] = l_X_pool
         args['y_training'] = l_y_pool
         args['query_strategy'] = partial(query_strategy,
-                                         n_instances=batch_size)
+                                         n_instances=self.batch_size)
 
         if query_strategy.__module__ == 'modAL.uncertainty':
             learner = ActiveLearner(**args)
@@ -152,8 +152,6 @@ class ActiveLearningExperiment:
             u_X_pool = np.delete(u_X_pool, query_index, axis=0)
             u_y_pool = np.delete(u_y_pool, query_index, axis=0)
 
-            scores.append(score)
-
         return scores
 
 
@@ -177,7 +175,9 @@ class ActiveLearningExperiment:
                        else np.arange(u_pool_size))
 
         learner.teach(X=u_X_pool[query_index], y=u_y_pool[query_index])
-        score = learner.score(self.X_test, self.y_test)
+        
+        y_pred = learner.predict(self.X_test)
+        score = f1_score(self.y_test, y_pred, average='macro')
 
         return query_index, score, query_strategy.__name__
 
@@ -208,7 +208,9 @@ class ActiveLearningExperiment:
 
             learner.teach(X=u_X_pool[query_index], y=u_y_pool[query_index])
 
-            score = learner.score(self.X_test, self.y_test)
+
+            y_pred = learner.predict(self.X_test)
+            score = f1_score(self.y_test, y_pred, average='macro')
 
             if score > best_score:
                 best_score = score
