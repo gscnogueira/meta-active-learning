@@ -21,6 +21,8 @@ from modAL import disagreement as d
 
 class ActiveLearningExperiment:
 
+    MAX_NUMBER_OF_CLASSES = 5
+
     DISAGREEMENT_STRATEGIES = [d.max_disagreement_sampling,
                                d.vote_entropy_sampling,
                                d.consensus_entropy_sampling] 
@@ -119,6 +121,38 @@ class ActiveLearningExperiment:
         return self.__run_marker(estimator, query_strategies,
                                  self.__baseline_query)
 
+    def run_meta_query(self, estimator, query_strategies, meta_model):
+        return self.__run_marker(
+            estimator,
+            query_strategies,
+            partial(self.__meta_sample_query, meta_model=meta_model))
+
+    def _extract_unsupervised_mfs(self, X):
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore')
+            mfe = MFE(groups='all')
+            mfe.fit(X)
+            mf_names, mf_values = mfe.extract()
+
+        mfs = pd.Series(data=mf_values, index=mf_names)
+        return mfs
+
+    def _extract_clustering_mfs(self, X):
+
+        clusterer = self.__get_best_cluster(X)
+
+        y = clusterer.labels_
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore')
+            mfe = MFE(groups='clustering')
+            mfe.fit(X, y)
+            mf_names, mf_values = mfe.extract()
+
+        mfs = pd.Series(data=mf_values, index=mf_names)
+        return mfs
+
     def __run_marker(self, estimator, query_strategies: list, marker_query):
 
         l_X_pool = self.X_train[self.labeled_index]
@@ -154,6 +188,50 @@ class ActiveLearningExperiment:
 
         return scores
 
+    def __meta_sample_query(self, estimator,
+                            l_pool, u_pool,
+                            query_strategies,
+                            meta_model):
+
+        query_strategy_dict = {
+            'consensus_entropy_sampling': d.consensus_entropy_sampling,
+            'entropy_sampling': u.entropy_sampling,
+            'margin_sampling': u.margin_sampling,
+            'max_disagreement_sampling': d.max_disagreement_sampling,
+            'uncertainty_batch_sampling': b.uncertainty_batch_sampling,
+            'uncertainty_sampling': u.uncertainty_sampling,
+            'vote_entropy_sampling': d.vote_entropy_sampling
+        }
+
+        l_X_pool, l_y_pool = l_pool
+        u_X_pool, u_y_pool = u_pool
+        u_pool_size = np.size(u_y_pool)
+
+        # Extração de metafeatures
+        uns_mfs = self._extract_unsupervised_mfs(u_X_pool)
+        clst_mfs = self._extract_clustering_mfs(u_X_pool)
+        mfs = pd.concat([uns_mfs, clst_mfs]).values
+
+        X = [mfs]
+
+        pred_strategy = meta_model.predict(X)[0]
+        query_strategy = query_strategy_dict[pred_strategy]
+
+        learner = self.__gen_learner(query_strategy=query_strategy,
+                                     estimator=estimator,
+                                     X_training=l_X_pool,
+                                     y_training=l_y_pool)
+
+        query_index = (learner.query(u_X_pool)[0]
+                       if u_pool_size > self.batch_size + 2
+                       else np.arange(u_pool_size))
+
+        learner.teach(X=u_X_pool[query_index], y=u_y_pool[query_index])
+
+        y_pred = learner.predict(self.X_test)
+        score = f1_score(self.y_test, y_pred, average='macro')
+
+        return query_index, score, query_strategy.__name__
 
     def __baseline_query(self, estimator,
                          l_pool, u_pool,
@@ -274,9 +352,30 @@ class ActiveLearningExperiment:
 
         return X, y
 
+    def __get_best_cluster(self, X):
+
+        range_n_clusters = range(2, min(X.shape[0]+1,
+                                        self.MAX_NUMBER_OF_CLASSES+1))
+
+        # Inicia max_score com valor suficientemente pequeno
+        max_score = -10
+        best_clusterer = None
+
+        for n_clusters in range_n_clusters:
+
+            clusterer = KMeans(n_clusters=n_clusters, n_init='auto')
+            cluster_labels = clusterer.fit_predict(X)
+
+            current_score = silhouette_score(X, cluster_labels)
+
+            if current_score > max_score:
+                max_score = current_score
+                best_clusterer = clusterer
+
+        return best_clusterer
+
 class MetaBaseBuilder(ActiveLearningExperiment):
 
-    MAX_NUMBER_OF_CLASSES = 5
 
     def run(self, estimator, n_queries,
             query_strategies: list,
@@ -302,9 +401,9 @@ class MetaBaseBuilder(ActiveLearningExperiment):
             # Extração de metafeatures dos dados não rotulados
 
             # Extração de medidas não supervisionadas
-            uns_mfs = self.__extract_unsupervised_mfs(u_X_pool)
+            uns_mfs = self._extract_unsupervised_mfs(u_X_pool)
 
-            clst_mfs = self.__extract_clustering_mfs(u_X_pool)
+            clst_mfs = self._extract_clustering_mfs(u_X_pool)
 
             mfs = pd.concat([uns_mfs, clst_mfs])
 
@@ -340,53 +439,7 @@ class MetaBaseBuilder(ActiveLearningExperiment):
         return pd.DataFrame(meta_examples).set_index('query_number')
 
 
-    def __extract_unsupervised_mfs(self, X):
 
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore')
-            mfe = MFE(groups='all')
-            mfe.fit(X)
-            mf_names, mf_values = mfe.extract()
-
-        mfs = pd.Series(data=mf_values, index=mf_names)
-        return mfs
-
-    def __extract_clustering_mfs(self, X):
-
-        clusterer = self.__get_best_cluster(X)
-
-
-        y = clusterer.labels_
-
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore')
-            mfe = MFE(groups='clustering')
-            mfe.fit(X, y)
-            mf_names, mf_values = mfe.extract()
-
-        mfs = pd.Series(data=mf_values, index=mf_names)
-        return mfs
-
-    def __get_best_cluster(self, X):
-
-
-        range_n_clusters = range(2, min(X.shape[0]+1, self.MAX_NUMBER_OF_CLASSES+1))
-
-        max_score = -10
-        best_clusterer = None
-
-        for n_clusters in range_n_clusters:
-
-            clusterer = KMeans(n_clusters=n_clusters, n_init='auto')
-            cluster_labels = clusterer.fit_predict(X)
-
-            current_score = silhouette_score(X, cluster_labels)
-
-            if current_score > max_score:
-                max_score = current_score
-                best_clusterer = clusterer
-
-        return best_clusterer
 
 
 if __name__ == "__main__":
