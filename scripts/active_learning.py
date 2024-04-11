@@ -30,9 +30,13 @@ class ActiveLearningExperiment:
                               u.entropy_sampling,
                               b.uncertainty_batch_sampling]
     
-    def __init__(self, dataset_id, l_size, random_state=None):
+    def __init__(self, dataset_id, initial_labeled_size, n_queries, batch_size,
+                 committee_size=3, random_state=None):
 
+        self.batch_size = batch_size
+        self.committee_size = committee_size
         self.dataset_id = dataset_id
+        self.n_queries = n_queries
 
         X, y = self.__load_data(dataset_id)
 
@@ -45,14 +49,14 @@ class ActiveLearningExperiment:
             np.random.RandomState(random_state).choice(np.where(y_train == cls)[0])
             for cls in np.unique(y_train)]
 
-        if (n_classes := len(labeled_index)) < l_size:
+        if (n_classes := len(labeled_index)) < initial_labeled_size:
 
             possible_choices = [i for i in range(len(y_train))
                                if i not in labeled_index]
 
             additional_index = np.random.RandomState(random_state).choice(
                 possible_choices,
-                size=l_size - n_classes,
+                size=initial_labeled_size - n_classes,
                 replace=False)
 
             labeled_index.extend(additional_index.tolist())
@@ -61,8 +65,7 @@ class ActiveLearningExperiment:
         self.X_train, self.X_test = X_train, X_test
         self.y_train, self.y_test = y_train, y_test
 
-    def run(self, estimator, query_strategy, n_queries=100, batch_size=5,
-            committee_size=None):
+    def run(self, estimator, query_strategy):
 
         l_X_pool = self.X_train[self.labeled_index]
         l_y_pool = self.y_train[self.labeled_index]
@@ -80,12 +83,12 @@ class ActiveLearningExperiment:
         if query_strategy.__module__ == 'modAL.uncertainty':
             learner = ActiveLearner(**args)
         else:
-            learner_list = [ActiveLearner(**args) for _ in range(committee_size)]
+            learner_list = [ActiveLearner(**args) for _ in range(self.committee_size)]
             learner = Committee(learner_list=learner_list,
                                 query_strategy=args['query_strategy'])
 
         scores = []
-        for idx in range(n_queries):
+        for idx in range(self.n_queries):
 
             u_pool_size = np.size(u_y_pool)
 
@@ -93,7 +96,7 @@ class ActiveLearningExperiment:
                 break
 
             query_index = (learner.query(u_X_pool)[0]
-                           if u_pool_size > batch_size + 1
+                           if u_pool_size > self.batch_size + 2
                            else np.arange(u_pool_size))
 
             learner.teach(X=u_X_pool[query_index], y=u_y_pool[query_index])
@@ -108,9 +111,15 @@ class ActiveLearningExperiment:
 
         return scores
 
-    def run_topline(self, estimator, n_queries,
-                    query_strategies: list,
-                    batch_size=5, committee_size=3):
+    def run_topline(self, estimator, query_strategies: list):
+        return self.__run_marker(estimator, query_strategies,
+                                 self._topline_query)
+
+    def run_baseline(self, estimator, query_strategies: list):
+        return self.__run_marker(estimator, query_strategies,
+                                 self.__baseline_query)
+
+    def __run_marker(self, estimator, query_strategies: list, marker_query):
 
         l_X_pool = self.X_train[self.labeled_index]
         l_y_pool = self.y_train[self.labeled_index]
@@ -120,21 +129,20 @@ class ActiveLearningExperiment:
 
         scores = []
 
-        for idx in tqdm(range(n_queries)):
+        for idx in tqdm(range(self.n_queries)):
 
             u_pool_size = np.size(u_y_pool)
 
             if u_pool_size <= 0:
                 break
 
-            import pdb; pdb.set_trace()
-            query_index, score = self.__topline_query(
+            query_index, score, _ = marker_query(
                 estimator=estimator,
                 query_strategies=query_strategies,
                 l_pool=(l_X_pool, l_y_pool),
-                u_pool=(u_X_pool, u_y_pool),
-                batch_size=5,
-                committee_size=committee_size)
+                u_pool=(u_X_pool, u_y_pool))
+
+            scores.append(score)
 
             new_X, new_y = u_X_pool[query_index], u_y_pool[query_index]
 
@@ -148,19 +156,41 @@ class ActiveLearningExperiment:
 
         return scores
 
+
+    def __baseline_query(self, estimator,
+                         l_pool, u_pool,
+                         query_strategies):
+
+        l_X_pool, l_y_pool = l_pool
+        u_X_pool, u_y_pool = u_pool
+        u_pool_size = np.size(u_y_pool)
+
+        query_strategy = np.random.choice(query_strategies)
+
+        learner = self.__gen_learner(query_strategy=query_strategy,
+                                     estimator=estimator,
+                                     X_training=l_X_pool,
+                                     y_training=l_y_pool)
+
+        query_index = (learner.query(u_X_pool)[0]
+                       if u_pool_size > self.batch_size + 2
+                       else np.arange(u_pool_size))
+
+        learner.teach(X=u_X_pool[query_index], y=u_y_pool[query_index])
+        score = learner.score(self.X_test, self.y_test)
+
+        return query_index, score, query_strategy.__name__
+
+
     def _topline_query(self, estimator,
                         l_pool, u_pool,
-                        query_strategies,
-                        batch_size, committee_size):
+                        query_strategies):
 
         args = dict()
         args['estimator'] = estimator
         args['X_training'], args['y_training'] = l_pool
 
-        active_learners = [self.__gen_learner(query_strategy=s,
-                                              batch_size=batch_size,
-                                              committee_size=committee_size,
-                                              **args)
+        active_learners = [self.__gen_learner(query_strategy=s, **args)
                            for s in query_strategies]
 
         best_score = 0
@@ -173,7 +203,7 @@ class ActiveLearningExperiment:
         for i, learner in enumerate(active_learners):
 
             query_index = (learner.query(u_X_pool)[0]
-                           if u_pool_size > batch_size + 2
+                           if u_pool_size > self.batch_size + 2
                            else np.arange(u_pool_size))
 
             learner.teach(X=u_X_pool[query_index], y=u_y_pool[query_index])
@@ -187,22 +217,20 @@ class ActiveLearningExperiment:
 
         return best_sample, best_score, best_strategy.__name__
 
-    def __gen_learner(self, query_strategy, committee_size, batch_size, **kwargs):
+    def __gen_learner(self, query_strategy, **kwargs):
+
+        qs = partial(query_strategy, n_instances=self.batch_size)
 
         if query_strategy in self.UNCERTAINTY_STRATEGIES:
-            query_strategy = partial(query_strategy, n_instances=batch_size)
 
-            learner = ActiveLearner(query_strategy=query_strategy, **kwargs)
-
+            learner = ActiveLearner(query_strategy=qs, **kwargs)
             return learner
 
         elif query_strategy in self.DISAGREEMENT_STRATEGIES:
 
-            query_strategy = partial(query_strategy, n_instances=batch_size)
-
             learner_list = []
 
-            for _ in range(committee_size):
+            for _ in range(self.committee_size):
                 try:
                     learner = ActiveLearner(bootstrap_init=True, **kwargs)
                     if not np.array_equal(self.classes_,
@@ -218,7 +246,7 @@ class ActiveLearningExperiment:
                 learner_list.append(learner)
 
             learner = Committee(learner_list=learner_list,
-                                query_strategy=query_strategy)
+                                query_strategy=qs)
 
             return learner
 
