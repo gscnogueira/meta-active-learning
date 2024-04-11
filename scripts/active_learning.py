@@ -121,11 +121,12 @@ class ActiveLearningExperiment:
         return self.__run_marker(estimator, query_strategies,
                                  self.__baseline_query)
 
-    def run_meta_query(self, estimator, query_strategies, meta_model):
+    def run_meta_query(self, estimator, meta_model):
         return self.__run_marker(
-            estimator,
-            query_strategies,
-            partial(self.__meta_sample_query, meta_model=meta_model))
+            estimator=estimator,
+            query_strategies=None,
+            marker_query=partial(self.__meta_sample_query,
+                                 meta_model=meta_model))
 
     def _extract_unsupervised_mfs(self, X):
 
@@ -174,7 +175,8 @@ class ActiveLearningExperiment:
                 estimator=estimator,
                 query_strategies=query_strategies,
                 l_pool=(l_X_pool, l_y_pool),
-                u_pool=(u_X_pool, u_y_pool))
+                u_pool=(u_X_pool, u_y_pool),
+                query_number=idx)
 
             scores.append(score)
 
@@ -190,8 +192,9 @@ class ActiveLearningExperiment:
 
     def __meta_sample_query(self, estimator,
                             l_pool, u_pool,
-                            query_strategies,
-                            meta_model):
+                            query_number,
+                            meta_model,
+                            **kwargs):
 
         query_strategy_dict = {
             'consensus_entropy_sampling': d.consensus_entropy_sampling,
@@ -208,11 +211,14 @@ class ActiveLearningExperiment:
         u_pool_size = np.size(u_y_pool)
 
         # Extração de metafeatures
+
+        query_number = pd.Series(data=[query_number], index=['query_number'])
         uns_mfs = self._extract_unsupervised_mfs(u_X_pool)
         clst_mfs = self._extract_clustering_mfs(u_X_pool)
-        mfs = pd.concat([uns_mfs, clst_mfs]).values
 
-        X = [mfs]
+        mfs = pd.concat([query_number, uns_mfs, clst_mfs])
+
+        X = [mfs.values]
 
         pred_strategy = meta_model.predict(X)[0]
         query_strategy = query_strategy_dict[pred_strategy]
@@ -235,7 +241,8 @@ class ActiveLearningExperiment:
 
     def __baseline_query(self, estimator,
                          l_pool, u_pool,
-                         query_strategies):
+                         query_strategies,
+                         **kwargs):
 
         l_X_pool, l_y_pool = l_pool
         u_X_pool, u_y_pool = u_pool
@@ -261,8 +268,9 @@ class ActiveLearningExperiment:
 
 
     def _topline_query(self, estimator,
-                        l_pool, u_pool,
-                        query_strategies):
+                       l_pool, u_pool,
+                       query_strategies,
+                       **kwargs):
 
         args = dict()
         args['estimator'] = estimator
