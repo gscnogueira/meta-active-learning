@@ -90,7 +90,7 @@ class ActiveLearningExperiment:
                                 query_strategy=args['query_strategy'])
 
         scores = []
-        for idx in range(self.n_queries):
+        for idx in tqdm(range(self.n_queries), desc=query_strategy.__name__):
 
             u_pool_size = np.size(u_y_pool)
 
@@ -115,11 +115,11 @@ class ActiveLearningExperiment:
 
     def run_topline(self, estimator, query_strategies: list):
         return self.__run_marker(estimator, query_strategies,
-                                 self._topline_query)
+                                 self._topline_query, name='perfect_meta_sampling')
 
     def run_baseline(self, estimator, query_strategies: list):
         return self.__run_marker(estimator, query_strategies,
-                                 self.__baseline_query)
+                                 self.__baseline_query, name='random_meta_sampling')
 
     def run_meta_query(self, estimator, meta_model):
         return self.__run_marker(
@@ -154,7 +154,7 @@ class ActiveLearningExperiment:
         mfs = pd.Series(data=mf_values, index=mf_names)
         return mfs
 
-    def __run_marker(self, estimator, query_strategies: list, marker_query):
+    def __run_marker(self, estimator, query_strategies: list, marker_query, name=None):
 
         l_X_pool = self.X_train[self.labeled_index]
         l_y_pool = self.y_train[self.labeled_index]
@@ -163,15 +163,16 @@ class ActiveLearningExperiment:
         u_y_pool = np.delete(self.y_train, self.labeled_index, axis=0)
 
         scores = []
+        choices = []
 
-        for idx in tqdm(range(self.n_queries)):
+        for idx in tqdm(range(self.n_queries), desc=name):
 
             u_pool_size = np.size(u_y_pool)
 
             if u_pool_size <= 0:
                 break
 
-            query_index, score, _ = marker_query(
+            query_index, score, choice = marker_query(
                 estimator=estimator,
                 query_strategies=query_strategies,
                 l_pool=(l_X_pool, l_y_pool),
@@ -179,6 +180,7 @@ class ActiveLearningExperiment:
                 query_number=idx)
 
             scores.append(score)
+            choices.append(choice)
 
             new_X, new_y = u_X_pool[query_index], u_y_pool[query_index]
 
@@ -188,7 +190,7 @@ class ActiveLearningExperiment:
             u_X_pool = np.delete(u_X_pool, query_index, axis=0)
             u_y_pool = np.delete(u_y_pool, query_index, axis=0)
 
-        return scores
+        return scores, choices
 
     def __meta_sample_query(self, estimator,
                             l_pool, u_pool,
@@ -217,6 +219,8 @@ class ActiveLearningExperiment:
         clst_mfs = self._extract_clustering_mfs(u_X_pool)
 
         mfs = pd.concat([query_number, uns_mfs, clst_mfs])
+
+        mfs.drop(labels='num_to_cat', inplace=True)
 
         X = [mfs.values]
 
