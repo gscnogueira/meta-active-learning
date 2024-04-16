@@ -1,7 +1,6 @@
-import pickle as pkl
+import os
 import warnings
 from functools import partial
-from itertools import product
 
 from tqdm import tqdm
 from modAL.models import ActiveLearner, Committee
@@ -126,7 +125,8 @@ class ActiveLearningExperiment:
             estimator=estimator,
             query_strategies=None,
             marker_query=partial(self.__meta_sample_query,
-                                 meta_model=meta_model))
+                                 meta_model=meta_model),
+            name='meta_sampling')
 
     def _extract_unsupervised_mfs(self, X):
 
@@ -386,24 +386,25 @@ class ActiveLearningExperiment:
 
         return best_clusterer
 
+
 class MetaBaseBuilder(ActiveLearningExperiment):
 
 
-    def run(self, estimator, n_queries,
+    def run(self, estimator,
             query_strategies: list,
-            batch_size=5, committee_size=3):
-        
+            download_path):
+
         l_X_pool = self.X_train[self.labeled_index]
         l_y_pool = self.y_train[self.labeled_index]
 
         u_X_pool = np.delete(self.X_train, self.labeled_index, axis=0)
         u_y_pool = np.delete(self.y_train, self.labeled_index, axis=0)
 
-        scores = []
+        csv_path = os.path.join(download_path,
+                                str(self.dataset_id),
+                                f'{type(estimator).__name__}.csv')
 
-        meta_examples = []
-
-        for idx in range(n_queries):
+        for idx in range(self.n_queries):
 
             u_pool_size = np.size(u_y_pool)
 
@@ -414,9 +415,7 @@ class MetaBaseBuilder(ActiveLearningExperiment):
 
             # Extração de medidas não supervisionadas
             uns_mfs = self._extract_unsupervised_mfs(u_X_pool)
-
             clst_mfs = self._extract_clustering_mfs(u_X_pool)
-
             mfs = pd.concat([uns_mfs, clst_mfs])
 
             with warnings.catch_warnings():
@@ -428,7 +427,7 @@ class MetaBaseBuilder(ActiveLearningExperiment):
                     l_pool=(l_X_pool, l_y_pool),
                     u_pool=(u_X_pool, u_y_pool),
                     batch_size=5,
-                    committee_size=committee_size)
+                    committee_size=self.committee_size)
 
             mfs['dataset_id'] = int(self.dataset_id)
             mfs['query_number'] = idx
@@ -436,7 +435,9 @@ class MetaBaseBuilder(ActiveLearningExperiment):
             mfs['best_strategy'] = strategy_name
             mfs['best_score'] = score
 
-            meta_examples.append(mfs)
+            # Incluindo meta-exemplo na metabase
+            mfs.to_frame().T.to_csv(csv_path, mode='a',
+                                    header=os.path.exists(csv_path))
 
             new_X, new_y = u_X_pool[query_index], u_y_pool[query_index]
 
@@ -445,102 +446,3 @@ class MetaBaseBuilder(ActiveLearningExperiment):
 
             u_X_pool = np.delete(u_X_pool, query_index, axis=0)
             u_y_pool = np.delete(u_y_pool, query_index, axis=0)
-
-            scores.append(score)
-
-        return pd.DataFrame(meta_examples).set_index('query_number')
-
-
-
-
-
-if __name__ == "__main__":
-
-    import os
-    import logging
-    from multiprocessing import Pool
-
-    from sklearn.svm import SVC
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.neighbors import KNeighborsClassifier
-    from sklearn.neural_network import MLPClassifier
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.tree import DecisionTreeClassifier
-    from sklearn.naive_bayes import GaussianNB
-
-    from modAL import uncertainty as u
-    from modAL import disagreement as d
-    from modAL import batch as b
-
-    DOWNLOAD_PATH = 'metabase/'
-
-    class SVCLinear(SVC):
-        pass
-
-    def gen_metabase(args):
-        try:
-            logging.warning(f'[{args}] Iniciando construção de metabase.')
-            dataset_id, estimator = args
-            builder = MetaBaseBuilder(dataset_id=dataset_id, **init_args)
-
-            df = builder.run(estimator=estimator, **run_args)
-
-            try:
-                os.mkdir(os.path.join(DOWNLOAD_PATH, str(dataset_id)))
-            except FileExistsError:
-                pass
-
-            df.to_csv(os.path.join(
-                DOWNLOAD_PATH,
-                str(dataset_id),
-                f'{type(estimator).__name__}.csv' ))
-
-            logging.warning(f'[{args}] Metabase construida.')
-
-        finally:
-            pass
-        # except Exception as e:
-        #     logging.error(f'[{args}] Ocorreu um erro: {e}')
-
-
-    query_strategies = [u.uncertainty_sampling,
-                        u.margin_sampling,
-                        u.entropy_sampling,
-                        b.uncertainty_batch_sampling,
-                        d.max_disagreement_sampling,
-                        d.consensus_entropy_sampling,
-                        d.vote_entropy_sampling]
-
-
-    dataset_ids = {int(f.split('_')[0])
-                   for f in os.listdir('../metabase/')
-                   if f.endswith('.csv')}
-
-
-    dataset_ids.update(int(line) for line in
-                       open('selected_dataset_ids.txt'))
-
-    clf_list = [SVCLinear(kernel='linear', probability=True),
-                SVC(probability=True),
-                RandomForestClassifier(),
-                KNeighborsClassifier(),
-                MLPClassifier(),
-                LogisticRegression(),
-                DecisionTreeClassifier(),
-                GaussianNB()]
-
-
-    init_args = {"random_state": 42, "l_size": 5}
-    run_args = {"query_strategies": query_strategies,
-                "n_queries": 100,
-                "batch_size": 5}
-
-    logging.basicConfig(level=logging.WARNING,
-                        format='%(asctime)s:%(levelname)s:%(message)s',
-                        # filename='active_learning.log'
-                        )
-
-    # result = list(map(gen_metabase, product(dataset_ids, clf_list)))
-
-    with Pool() as p:
-        result = p.map(gen_metabase, product(dataset_ids, clf_list))
