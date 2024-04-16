@@ -2,6 +2,7 @@ from itertools import product
 from multiprocessing import Pool
 import logging
 import os
+import shutil
 
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
@@ -47,10 +48,12 @@ def gen_metabase(args):
         dataset_id, estimator = args
         builder = MetaBaseBuilder(dataset_id=dataset_id, **init_args)
 
+        dir_path = os.path.join(DOWNLOAD_PATH, str(dataset_id)) 
         try:
-            os.mkdir(os.path.join(DOWNLOAD_PATH, str(dataset_id)))
+            os.mkdir(dir_path)
         except FileExistsError:
-            pass
+            shutil.rmtree(dir_path)
+            os.mkdir(dir_path)
 
         builder.run(estimator=estimator,
                     download_path=DOWNLOAD_PATH,
