@@ -75,8 +75,7 @@ def run_experiment(train_data, test_data, initial_labeled_size,
     X_train, y_train = split_train_data(meta_base, train_data)
     test_data_id = int(test_data[0])
 
-    print(X_train.shape, y_train.shape)
-    print(test_data_id)
+    print('Conjunto de Teste:', test_data_id)
 
     meta_model = gen_meta_model(X_train, y_train)
 
@@ -105,9 +104,9 @@ def run_experiment(train_data, test_data, initial_labeled_size,
 
     metrics_dict = dict()
 
-    # for strategy in query_strategies:
-    #     scores = exp.run(estimator=SVC(probability=True), query_strategy=strategy)
-    #     metrics_dict[strategy.__name__] = scores
+    for strategy in query_strategies:
+        scores = exp.run(estimator=SVC(probability=True), query_strategy=strategy)
+        metrics_dict[strategy.__name__] = scores
 
     metrics_dict['random_meta_sampling'], metrics_dict['random_sampling_choice'] = exp.run_baseline(
         estimator=SVC(probability=True), query_strategies=query_strategies)
@@ -127,7 +126,7 @@ if __name__ == '__main__':
     BATCH_SIZE = 5
     N_LABELED_START = 5
     RANDOM_STATE = 42
-    N_QUERIES = 2
+    N_QUERIES = 100
 
     meta_base = gen_meta_base(DATA_DIR)
 
@@ -151,6 +150,8 @@ if __name__ == '__main__':
                             batch_size=BATCH_SIZE,
                             random_state=RANDOM_STATE)
         df.to_csv(os.path.join('results', f'{test_data[0]}.csv'))
+
+        print(df)
 
 
 
