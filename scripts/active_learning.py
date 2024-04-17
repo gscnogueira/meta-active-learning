@@ -437,7 +437,7 @@ class MetaBaseBuilder(ActiveLearningExperiment):
 
             # Incluindo meta-exemplo na metabase
             mfs.to_frame().T.to_csv(csv_path, mode='a',
-                                    header=os.path.exists(csv_path))
+                                    header=(not os.path.exists(csv_path)))
 
             new_X, new_y = u_X_pool[query_index], u_y_pool[query_index]
 
