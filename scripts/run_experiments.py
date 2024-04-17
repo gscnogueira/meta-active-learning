@@ -6,26 +6,28 @@ from sklearn.impute import SimpleImputer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import LeaveOneOut
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot
 from modAL import uncertainty as u, disagreement as d, batch as b
 from tqdm import tqdm
 
 from active_learning import ActiveLearningExperiment
 
-def gen_meta_base(data_path):
+def gen_meta_base(data_path, estimator):
 
     dfs = []
     index_columns = ['dataset_id','estimator', 'query_number']
 
     for root, _, files in os.walk(DATA_DIR):
         
-        if not len(files):
+        file_path = f'{estimator.__name__}.csv'
+
+        if  file_path not in files:
             continue
         
-        df = pd.concat(objs=(pd.read_csv(os.path.join(root,file)) for file in files))
+        df = pd.read_csv(os.path.join(root, file_path))
 
         df.query_number = df.query_number.astype(int)
         df.dataset_id = df.dataset_id.astype(int)
@@ -46,9 +48,9 @@ def preprocess_meta_base(meta_base: pd.DataFrame) -> pd.DataFrame:
 
 def split_train_data(meta_base, train_index):
 
-    train_data = meta_base.loc[train_index].xs("SVC", level='estimator').reset_index()
+    train_data = meta_base.loc[train_index].reset_index()
 
-    to_drop_on_training = ['dataset_id', 'best_strategy', 'best_score']
+    to_drop_on_training = ['dataset_id', 'best_strategy', 'best_score', 'estimator']
 
     X_train = train_data.drop(columns=to_drop_on_training)
     y_train = train_data['best_strategy']
@@ -68,8 +70,8 @@ def gen_meta_model(X_train, y_train):
     return meta_model
 
 
-def run_experiment(train_data, test_data, initial_labeled_size,
-                   n_queries, batch_size, random_state):
+def run_experiment(estimator, train_data, test_data, initial_labeled_size,
+                   n_queries, batch_size, random_state, **kwargs):
 
 
     X_train, y_train = split_train_data(meta_base, train_data)
@@ -105,17 +107,17 @@ def run_experiment(train_data, test_data, initial_labeled_size,
     metrics_dict = dict()
 
     for strategy in query_strategies:
-        scores = exp.run(estimator=SVC(probability=True), query_strategy=strategy)
+        scores = exp.run(estimator=estimator(**kwargs), query_strategy=strategy)
         metrics_dict[strategy.__name__] = scores
 
     metrics_dict['random_meta_sampling'], metrics_dict['random_sampling_choice'] = exp.run_baseline(
-        estimator=SVC(probability=True), query_strategies=query_strategies)
+        estimator=estimator(**kwargs), query_strategies=query_strategies)
 
     metrics_dict['perfect_meta_sampling'], metrics_dict['perfect_sampling_choice'] = exp.run_topline(
-        estimator=SVC(probability=True), query_strategies=query_strategies)
+        estimator=estimator(**kwargs), query_strategies=query_strategies)
 
     metrics_dict['meta_sampling'], metrics_dict['meta_sampling_choice'] = exp.run_meta_query(
-        estimator=SVC(probability=True), meta_model=meta_model)
+        estimator=estimator(**kwargs), meta_model=meta_model)
 
     return pd.DataFrame(metrics_dict)
 
@@ -128,30 +130,46 @@ if __name__ == '__main__':
     RANDOM_STATE = 42
     N_QUERIES = 100
 
-    meta_base = gen_meta_base(DATA_DIR)
+    ESTIMATOR = KNeighborsClassifier
+
+    # selecionando apenas os metaexemplos que utilizaram SVM com kernel rbf (SVC)
+    meta_base = gen_meta_base(DATA_DIR, ESTIMATOR) # TODO checar se foram salvos nomes errados de estimators
 
     # Remove mft que apresenta valor NaN em todos os conjuntos
     meta_base.drop(columns = ['num_to_cat'], inplace=True)
 
     meta_base = preprocess_meta_base(meta_base)
 
+    # svc_index = meta_base.index.get_level_values('estimator') == 'SVC'
+    # meta_base = meta_base.loc[svc_index]
+
     dataset_ids = meta_base.index.levels[0]
 
     loo = LeaveOneOut()
 
-    for train_index, test_index in loo.split(dataset_ids):
+    print(f'Iniciando processo para {len(dataset_ids)} bases.')
+
+    for i, (train_index, test_index) in enumerate(loo.split(dataset_ids)):
+        print(f'Split [{i}/{len(dataset_ids)}]')
+
         train_data = dataset_ids[train_index]
         test_data = dataset_ids[test_index]
 
-        df = run_experiment(train_data=train_data,
-                            test_data=test_data,
-                            initial_labeled_size=N_LABELED_START,
-                            n_queries=N_QUERIES,
-                            batch_size=BATCH_SIZE,
-                            random_state=RANDOM_STATE)
-        df.to_csv(os.path.join('results', f'{test_data[0]}.csv'))
+        df = run_experiment(
+            train_data=train_data,
+            test_data=test_data,
+            estimator=ESTIMATOR,
+            initial_labeled_size=N_LABELED_START,
+            n_queries=N_QUERIES,
+            batch_size=BATCH_SIZE,
+            random_state=RANDOM_STATE)
 
-        print(df)
+        download_path = os.path.join('results', ESTIMATOR.__name__)
 
+        try:
+            os.mkdir(download_path)
+        except FileExistsError:
+            pass
 
+        df.to_csv(os.path.join(download_path, f'{test_data[0]}.csv'))
 
