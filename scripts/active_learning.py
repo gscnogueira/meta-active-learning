@@ -375,10 +375,14 @@ class ActiveLearningExperiment:
 
         for n_clusters in range_n_clusters:
 
-            clusterer = KMeans(n_clusters=n_clusters, n_init='auto')
-            cluster_labels = clusterer.fit_predict(X)
+            try:
+                clusterer = KMeans(n_clusters=n_clusters, n_init='auto')
+                cluster_labels = clusterer.fit_predict(X)
 
-            current_score = silhouette_score(X, cluster_labels)
+                current_score = silhouette_score(X, cluster_labels)
+
+            except ValueError:
+                continue
 
             if current_score > max_score:
                 max_score = current_score
