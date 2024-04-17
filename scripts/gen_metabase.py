@@ -36,7 +36,7 @@ class SVCLinear(SVC):
 def gen_metabase(args):
     init_args = {"random_state": 42,
                  "initial_labeled_size": 5,
-                 "n_queries": 5,
+                 "n_queries": 100,
                  "batch_size": 5}
 
     run_args = {"query_strategies": query_strategies}
