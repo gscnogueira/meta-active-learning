@@ -79,6 +79,7 @@ dataset_ids = {int(f.split('_')[0])
                for f in os.listdir('../metabase/')
                if f.endswith('.csv')}
 
+
 dataset_ids.update(int(line) for line in
                    open('selected_dataset_ids.txt'))
 
@@ -92,4 +93,4 @@ logging.basicConfig(level=logging.WARNING,
                     format='%(asctime)s:%(levelname)s:%(message)s')
 
 with Pool() as p:
-    result = p.map(gen_metabase, product(dataset_ids, clf_list))
+    result = p.map(gen_metabase, product(dataset_ids, clf_list), 1)
