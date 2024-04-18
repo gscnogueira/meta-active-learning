@@ -52,8 +52,10 @@ def gen_metabase(args):
         try:
             os.mkdir(dir_path)
         except FileExistsError:
-            shutil.rmtree(dir_path)
-            os.mkdir(dir_path)
+            if os.path.exists(os.path.join(dir_path, f'{type(estimator).__name__}.csv')):
+                logging.warning(f'[{args}, {pid}] Metabase já havia sido gerada.')
+                return 
+            pass
 
         builder.run(estimator=estimator,
                     download_path=DOWNLOAD_PATH,
@@ -62,7 +64,6 @@ def gen_metabase(args):
         logging.warning(f'[{args}, {pid}] Metabase construida.')
 
     except Exception as e:
-        raise e
         logging.error(f'[{args}, {pid}] Ocorreu um erro: {e}')
 
 
