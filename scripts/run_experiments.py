@@ -36,7 +36,7 @@ def gen_meta_base(data_path, estimator):
         
         dfs.append(df)
         
-    return pd.concat(dfs)
+    return pd.concat(dfs, join='inner')
 
 
 def preprocess_meta_base(meta_base: pd.DataFrame) -> pd.DataFrame:
@@ -81,8 +81,8 @@ def run_experiment(estimator, train_data, test_data, initial_labeled_size,
 
     meta_model = gen_meta_model(X_train, y_train)
 
-    with open(os.path.join('meta_models', f'{test_data_id}.pkl'), 'wb') as f:
-        pkl.dump(meta_model, f)
+    # with open(os.path.join('meta_models', f'{test_data_id}.pkl'), 'wb') as f:
+        # pkl.dump(meta_model, f)
 
 
     exp = ActiveLearningExperiment(dataset_id=test_data_id,
@@ -154,6 +154,7 @@ if __name__ == '__main__':
 
         train_data = dataset_ids[train_index]
         test_data = dataset_ids[test_index]
+
 
         df = run_experiment(
             train_data=train_data,
