@@ -130,7 +130,7 @@ if __name__ == '__main__':
     RANDOM_STATE = 42
     N_QUERIES = 100
 
-    ESTIMATOR = KNeighborsClassifier
+    ESTIMATOR = SVC
 
     # selecionando apenas os metaexemplos que utilizaram SVM com kernel rbf (SVC)
     meta_base = gen_meta_base(DATA_DIR, ESTIMATOR) # TODO checar se foram salvos nomes errados de estimators
@@ -155,22 +155,31 @@ if __name__ == '__main__':
         train_data = dataset_ids[train_index]
         test_data = dataset_ids[test_index]
 
-
-        df = run_experiment(
-            train_data=train_data,
-            test_data=test_data,
-            estimator=ESTIMATOR,
-            initial_labeled_size=N_LABELED_START,
-            n_queries=N_QUERIES,
-            batch_size=BATCH_SIZE,
-            random_state=RANDOM_STATE)
-
         download_path = os.path.join('results', ESTIMATOR.__name__)
+        csv_file = os.path.join(download_path, f'{test_data[0]}.csv')
+
+        if os.path.exists(csv_file):
+            continue
+
+        try:
+            df = run_experiment(
+                    train_data=train_data,
+                    test_data=test_data,
+                    estimator=ESTIMATOR,
+                    initial_labeled_size=N_LABELED_START,
+                    n_queries=N_QUERIES,
+                    batch_size=BATCH_SIZE,
+                    random_state=RANDOM_STATE, 
+                    probability=True)
+
+        except Exception as e:
+            print('Ocorreu um erro na geração da base')
+            continue
+
 
         try:
             os.mkdir(download_path)
         except FileExistsError:
             pass
 
-        df.to_csv(os.path.join(download_path, f'{test_data[0]}.csv'))
-
+        df.to_csv(csv_file)
