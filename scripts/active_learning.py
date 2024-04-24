@@ -214,11 +214,11 @@ class ActiveLearningExperiment:
 
         # Extração de metafeatures
 
-        query_number = pd.Series(data=[query_number], index=['query_number'])
+        # query_number = pd.Series(data=[query_number], index=['query_number'])
         uns_mfs = self._extract_unsupervised_mfs(u_X_pool)
         clst_mfs = self._extract_clustering_mfs(u_X_pool)
 
-        mfs = pd.concat([query_number, uns_mfs, clst_mfs])
+        mfs = pd.concat([uns_mfs, clst_mfs])
 
         mfs.drop(labels='num_to_cat', inplace=True)
 

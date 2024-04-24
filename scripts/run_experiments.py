@@ -50,7 +50,7 @@ def split_train_data(meta_base, train_index):
 
     train_data = meta_base.loc[train_index].reset_index()
 
-    to_drop_on_training = ['dataset_id', 'best_strategy', 'best_score', 'estimator']
+    to_drop_on_training = ['dataset_id', 'best_strategy', 'best_score', 'estimator', 'query_number']
 
     X_train = train_data.drop(columns=to_drop_on_training)
     y_train = train_data['best_strategy']
@@ -80,10 +80,6 @@ def run_experiment(estimator, train_data, test_data, initial_labeled_size,
     print('Conjunto de Teste:', test_data_id)
 
     meta_model = gen_meta_model(X_train, y_train)
-
-    # with open(os.path.join('meta_models', f'{test_data_id}.pkl'), 'wb') as f:
-        # pkl.dump(meta_model, f)
-
 
     exp = ActiveLearningExperiment(dataset_id=test_data_id,
                                    initial_labeled_size=N_LABELED_START,
@@ -130,18 +126,14 @@ if __name__ == '__main__':
     RANDOM_STATE = 42
     N_QUERIES = 100
 
-    ESTIMATOR = SVC
+    ESTIMATOR = KNeighborsClassifier
 
-    # selecionando apenas os metaexemplos que utilizaram SVM com kernel rbf (SVC)
-    meta_base = gen_meta_base(DATA_DIR, ESTIMATOR) # TODO checar se foram salvos nomes errados de estimators
+    meta_base = gen_meta_base(DATA_DIR, ESTIMATOR) 
 
     # Remove mft que apresenta valor NaN em todos os conjuntos
     meta_base.drop(columns = ['num_to_cat'], inplace=True)
 
     meta_base = preprocess_meta_base(meta_base)
-
-    # svc_index = meta_base.index.get_level_values('estimator') == 'SVC'
-    # meta_base = meta_base.loc[svc_index]
 
     dataset_ids = meta_base.index.levels[0]
 
@@ -158,24 +150,18 @@ if __name__ == '__main__':
         download_path = os.path.join('results', ESTIMATOR.__name__)
         csv_file = os.path.join(download_path, f'{test_data[0]}.csv')
 
-        if os.path.exists(csv_file):
-            continue
-
         try:
             df = run_experiment(
-                    train_data=train_data,
-                    test_data=test_data,
-                    estimator=ESTIMATOR,
-                    initial_labeled_size=N_LABELED_START,
-                    n_queries=N_QUERIES,
-                    batch_size=BATCH_SIZE,
-                    random_state=RANDOM_STATE, 
-                    probability=True)
-
+                train_data=train_data,
+                test_data=test_data,
+                estimator=ESTIMATOR,
+                initial_labeled_size=N_LABELED_START,
+                n_queries=N_QUERIES,
+                batch_size=BATCH_SIZE,
+                random_state=RANDOM_STATE)
         except Exception as e:
-            print('Ocorreu um erro na geração da base')
+            print('Ocorreu um erro:', e)
             continue
-
 
         try:
             os.mkdir(download_path)
