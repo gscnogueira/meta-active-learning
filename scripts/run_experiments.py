@@ -20,7 +20,7 @@ def gen_meta_base(data_path, estimator):
     dfs = []
     index_columns = ['dataset_id','estimator', 'query_number']
 
-    for root, _, files in os.walk(DATA_DIR):
+    for root, _, files in os.walk(data_path):
         
         file_path = f'{estimator.__name__}.csv'
 
