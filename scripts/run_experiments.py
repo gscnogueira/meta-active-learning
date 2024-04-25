@@ -50,7 +50,8 @@ def split_train_data(meta_base, train_index):
 
     train_data = meta_base.loc[train_index].reset_index()
 
-    to_drop_on_training = ['dataset_id', 'best_strategy', 'best_score', 'estimator', 'query_number']
+    clustering_mfts = ['ch', 'int', 'nre', 'pb', 'sc', 'sil', 'vdb', 'vdu']
+    to_drop_on_training = ['dataset_id', 'best_strategy', 'best_score', 'estimator', 'query_number'] + clustering_mfts
 
     X_train = train_data.drop(columns=to_drop_on_training)
     y_train = train_data['best_strategy']
@@ -159,6 +160,7 @@ if __name__ == '__main__':
                 n_queries=N_QUERIES,
                 batch_size=BATCH_SIZE,
                 random_state=RANDOM_STATE)
+
         except Exception as e:
             print('Ocorreu um erro:', e)
             continue
