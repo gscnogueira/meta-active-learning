@@ -1,0 +1,15 @@
+,uncertainty_sampling,entropy_sampling,margin_sampling,uncertainty_batch_sampling,consensus_entropy_sampling,vote_entropy_sampling,max_disagreement_sampling,random_meta_sampling,random_sampling_choice,perfect_meta_sampling,perfect_sampling_choice,meta_sampling,meta_sampling_choice
+0,1.0,1.0,1.0,0.9600614439324117,1.0,0.6720720720720721,1.0,1.0,uncertainty_batch_sampling,1.0,entropy_sampling,1.0,uncertainty_sampling
+1,1.0,1.0,1.0,1.0,0.9600614439324117,0.91875,1.0,0.9600614439324117,max_disagreement_sampling,1.0,consensus_entropy_sampling,1.0,uncertainty_sampling
+2,0.9600614439324117,1.0,1.0,0.9600614439324117,1.0,0.9600614439324117,1.0,0.9600614439324117,vote_entropy_sampling,1.0,uncertainty_sampling,1.0,uncertainty_sampling
+3,1.0,1.0,0.9600614439324117,1.0,1.0,1.0,1.0,0.9600614439324117,max_disagreement_sampling,1.0,entropy_sampling,1.0,uncertainty_sampling
+4,1.0,1.0,0.9600614439324117,0.9600614439324117,0.9600614439324117,1.0,1.0,1.0,vote_entropy_sampling,1.0,uncertainty_sampling,1.0,uncertainty_sampling
+5,0.9600614439324117,1.0,1.0,0.9600614439324117,0.9600614439324117,1.0,1.0,0.9600614439324117,uncertainty_batch_sampling,1.0,uncertainty_sampling,0.9600614439324117,uncertainty_sampling
+6,1.0,1.0,0.9600614439324117,0.9600614439324117,0.9600614439324117,1.0,1.0,0.9600614439324117,consensus_entropy_sampling,1.0,uncertainty_sampling,0.9600614439324117,uncertainty_sampling
+7,1.0,1.0,1.0,0.9600614439324117,0.9600614439324117,1.0,0.9600614439324117,0.9600614439324117,max_disagreement_sampling,1.0,uncertainty_sampling,1.0,uncertainty_sampling
+8,0.9600614439324117,1.0,1.0,1.0,1.0,0.9600614439324117,0.9600614439324117,0.9600614439324117,uncertainty_batch_sampling,1.0,uncertainty_sampling,0.9600614439324117,uncertainty_sampling
+9,1.0,0.9600614439324117,0.9600614439324117,0.9600614439324117,0.9600614439324117,0.9600614439324117,1.0,0.9600614439324117,consensus_entropy_sampling,1.0,entropy_sampling,0.9600614439324117,uncertainty_sampling
+10,0.9600614439324117,1.0,0.9600614439324117,0.9600614439324117,0.9600614439324117,1.0,0.9600614439324117,1.0,uncertainty_batch_sampling,1.0,margin_sampling,1.0,uncertainty_sampling
+11,0.9600614439324117,1.0,0.9600614439324117,0.9600614439324117,1.0,1.0,1.0,0.9600614439324117,uncertainty_batch_sampling,1.0,uncertainty_sampling,0.9600614439324117,uncertainty_sampling
+12,1.0,0.9600614439324117,1.0,0.9600614439324117,1.0,0.9600614439324117,1.0,1.0,uncertainty_sampling,1.0,uncertainty_sampling,0.9600614439324117,uncertainty_sampling
+13,1.0,1.0,0.9600614439324117,1.0,1.0,0.9600614439324117,0.9600614439324117,1.0,max_disagreement_sampling,1.0,uncertainty_sampling,1.0,uncertainty_sampling
