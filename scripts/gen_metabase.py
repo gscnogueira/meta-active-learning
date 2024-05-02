@@ -23,10 +23,10 @@ def gen_metabase(dataset_id,
 
     pid = os.getpid()
 
-    context_string = f'{dataset_id}, {estimator}'
+    context_string = f'{dataset_id}, {estimator}, {pid}'
 
     try:
-        logging.warning(f'[{context_string}, {pid}] Iniciando construção de metabase.')
+        logging.warning(f'[{context_string}] Iniciando construção de metabase.')
 
         builder = MetaBaseBuilder(dataset_id=dataset_id,
                                   initial_labeled_size=initial_labeled_size,
@@ -77,13 +77,13 @@ if __name__ == '__main__':
     dataset_ids = {40, 41}
 
     clf_list = [
-        SVCLinear(kernel='linear', probability=True),
+        # SVCLinear(kernel='linear', probability=True),
         SVC(probability=True),
-        RandomForestClassifier(),
+        # RandomForestClassifier(),
         KNeighborsClassifier(),
-        MLPClassifier(),
-        LogisticRegression(),
-        DecisionTreeClassifier(),
+        # MLPClassifier(),
+        # LogisticRegression(),
+        # DecisionTreeClassifier(),
         GaussianNB()
     ]
 
@@ -103,5 +103,10 @@ if __name__ == '__main__':
         batch_size=1,
         random_state=42)
 
-    list(map(lambda args: gen_metabase_partial(*args),
-             product(dataset_ids, clf_list)))
+    def func(args):
+        return gen_metabase_partial(*args)
+
+    with Pool() as p:
+        p.map(func,
+              product(dataset_ids, clf_list))
+

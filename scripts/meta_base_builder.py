@@ -54,7 +54,8 @@ class MetaBaseBuilder(ActiveLearningExperiment):
             mfs['best_strategy'] = strategy_name
             mfs['best_score'] = score
 
-            print(strategy_name, score, f'U:{np.size(u_y_pool)} L:{np.size(l_y_pool)}')
+            # print(strategy_name, score, f'U:{np.size(u_y_pool)} L:{np.size(l_y_pool)}')
+
             # Incluindo meta-exemplo na metabase
             mfs.to_frame().T.to_csv(csv_path, mode='a',
                                     header=(not os.path.exists(csv_path)))
