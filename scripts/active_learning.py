@@ -50,7 +50,7 @@ class ActiveLearningExperiment:
         X, y = self.__load_data(dataset_id)
 
         # TODO: verificar se os splits são sempre os mesmos toda vez que a classe é instanciada
-        X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, random_state=random_state)
 
         self.classes_ = np.unique(y)
 
@@ -59,6 +59,10 @@ class ActiveLearningExperiment:
             np.random.RandomState(random_state).choice(np.where(y_train == cls)[0])
             for cls in np.unique(y_train)]
 
+        print(labeled_index)
+
+        # TODO: verificar se esse comportamento é viável, visto que
+        # adiciona mais informação à configuração inicial
         if (n_classes := len(labeled_index)) < initial_labeled_size:
 
             possible_choices = [i for i in range(len(y_train))
@@ -136,6 +140,18 @@ class ActiveLearningExperiment:
             marker_query=partial(self.__meta_sample_query,
                                  meta_model=meta_model),
             name='meta_sampling')
+
+    def _extract_mfs(self, X, y):
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore')
+            mfe = MFE(groups='all')
+            mfe.fit(X,y)
+            mf_names, mf_values = mfe.extract()
+
+        mfs = pd.Series(data=mf_values, index=mf_names)
+
+        return mfs
 
     def _extract_unsupervised_mfs(self, X):
 
@@ -311,6 +327,8 @@ class ActiveLearningExperiment:
             y_pred = learner.predict(self.X_test)
             score = f1_score(self.y_test, y_pred, average='macro')
 
+            print(query_strategies[i], score)
+
             if score > best_score:
                 best_score = score
                 best_sample = query_index
@@ -322,12 +340,7 @@ class ActiveLearningExperiment:
 
         qs = partial(query_strategy, n_instances=self.batch_size)
 
-        if query_strategy in self.UNCERTAINTY_STRATEGIES:
-
-            learner = ActiveLearner(query_strategy=qs, **kwargs)
-            return learner
-
-        elif query_strategy in self.DISAGREEMENT_STRATEGIES:
+        if query_strategy in self.DISAGREEMENT_STRATEGIES:
 
             learner_list = []
 
@@ -352,7 +365,9 @@ class ActiveLearningExperiment:
             return learner
 
         else:
-            raise ValueError("Estratégia de sampling não suportada")
+
+            learner = ActiveLearner(query_strategy=qs, **kwargs)
+            return learner
 
 
     def __load_data(self, dataset_id):

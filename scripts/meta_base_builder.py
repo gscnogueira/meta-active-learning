@@ -14,6 +14,8 @@ class MetaBaseBuilder(ActiveLearningExperiment):
             query_strategies: list,
             download_path):
 
+        print(self.labeled_index)
+
         l_X_pool = self.X_train[self.labeled_index]
         l_y_pool = self.y_train[self.labeled_index]
 
@@ -29,14 +31,13 @@ class MetaBaseBuilder(ActiveLearningExperiment):
             u_pool_size = np.size(u_y_pool)
 
             if u_pool_size <= 0:
+                warnings.warn(
+                    f"(query {idx+1}/{self.n_queries}) Reserva de exemplos vazia.",
+                    UserWarning)
                 break
 
-            # Extração de metafeatures dos dados não rotulados
-
-            # Extração de medidas não supervisionadas
-            uns_mfs = self._extract_unsupervised_mfs(u_X_pool)
-            clst_mfs = self._extract_clustering_mfs(u_X_pool)
-            mfs = pd.concat([uns_mfs, clst_mfs])
+            # Extração de metafeatures dos dados rotulados
+            mfs = self._extract_mfs(l_X_pool, l_y_pool)
 
             with warnings.catch_warnings():
 
@@ -55,6 +56,7 @@ class MetaBaseBuilder(ActiveLearningExperiment):
             mfs['best_strategy'] = strategy_name
             mfs['best_score'] = score
 
+            print(mfs)
             # Incluindo meta-exemplo na metabase
             mfs.to_frame().T.to_csv(csv_path, mode='a',
                                     header=(not os.path.exists(csv_path)))
@@ -70,16 +72,25 @@ class MetaBaseBuilder(ActiveLearningExperiment):
 if __name__ == '__main__':
 
     from sklearn.neighbors import KNeighborsClassifier
-    from modAL import uncertainty as u
+    from modAL.uncertainty import margin_sampling
+    from modAL.disagreement import consensus_entropy_sampling
+    from expected_error import expected_error_reduction
+    from information_density import density_weighted
 
-    query_strategies = [u.uncertainty_sampling,
-                        u.margin_sampling]
+    pd.set_option('display.max_colwidth', None)
+
+    # TODO setar log loss como parâmetro em EER
+    query_strategies = [density_weighted,
+                        margin_sampling,
+                        consensus_entropy_sampling,
+                        expected_error_reduction]
 
     builder = MetaBaseBuilder(
         dataset_id=40,
         initial_labeled_size=5,
-        n_queries=1,
-        batch_size=5)
+        n_queries=3,
+        batch_size=5,
+        random_state=42)
 
     builder.run(estimator=KNeighborsClassifier(),
                 download_path='.',
