@@ -18,11 +18,12 @@ import openml
 from modAL import uncertainty as u, batch as b
 from modAL import disagreement as d
 
+from information_density import training_utility_sampling
 # Estratégias a serem utilizadas
-# - [ ] Uncertainty Sampling
-# - [ ] QBC
-# - [ ] Expected Error Reduction (Accuracy/Entropy)
-# - [ ] DW (Possível implementar com medida de densidade fornecida)
+# - [X] Uncertainty Sampling
+# - [X] QBC
+# - [X] Expected Error Reduction (Accuracy/Entropy)
+# - [X] DW (Possível implementar com medida de densidade fornecida)
 # - [ ] TU (Possível implementar com medida de densidade fornecida)
 
 
@@ -58,8 +59,6 @@ class ActiveLearningExperiment:
         labeled_index = [
             np.random.RandomState(random_state).choice(np.where(y_train == cls)[0])
             for cls in np.unique(y_train)]
-
-        print(labeled_index)
 
         # TODO: verificar se esse comportamento é viável, visto que
         # adiciona mais informação à configuração inicial
@@ -301,42 +300,42 @@ class ActiveLearningExperiment:
                        query_strategies,
                        **kwargs):
 
-        args = dict()
-        args['estimator'] = estimator
-        args['X_training'], args['y_training'] = l_pool
-
-        active_learners = [self.__gen_learner(query_strategy=s, **args)
-                           for s in query_strategies]
-
         best_score = 0
         best_sample = None
         best_strategy = None
         u_X_pool, u_y_pool = u_pool
+        l_X_pool, l_y_pool = l_pool
 
         u_pool_size = np.size(u_y_pool)
 
-        for i, learner in enumerate(active_learners):
+        for qs in query_strategies:
 
+            # TODO: implementar condição de maneira menos grotesca
+            learner = self.__gen_learner(
+                estimator=estimator,
+                X_training=l_X_pool,
+                y_training=l_y_pool,
+                query_strategy=(qs if qs != training_utility_sampling
+                                else partial(qs, X_labeled=l_X_pool)))
+
+            # TODO: Analisar a viabilidade dessa query final
             query_index = (learner.query(u_X_pool)[0]
                            if u_pool_size > self.batch_size + 2
                            else np.arange(u_pool_size))
 
             learner.teach(X=u_X_pool[query_index], y=u_y_pool[query_index])
 
-
             y_pred = learner.predict(self.X_test)
             score = f1_score(self.y_test, y_pred, average='macro')
-
-            print(query_strategies[i], score)
 
             if score > best_score:
                 best_score = score
                 best_sample = query_index
-                best_strategy = query_strategies[i]
+                best_strategy = qs
 
         return best_sample, best_score, best_strategy.__name__
 
-    def __gen_learner(self, query_strategy, **kwargs):
+    def __gen_learner(self, estimator, query_strategy, X_training, y_training):
 
         qs = partial(query_strategy, n_instances=self.batch_size)
 
@@ -346,7 +345,11 @@ class ActiveLearningExperiment:
 
             for _ in range(self.committee_size):
                 try:
-                    learner = ActiveLearner(bootstrap_init=True, **kwargs)
+                    learner = ActiveLearner(estimator=estimator,
+                                            query_strategy=qs,
+                                            X_training=X_training,
+                                            y_training=y_training,
+                                            bootstrap_init=True)
                     if not np.array_equal(self.classes_,
                                           learner.estimator.classes_):
                         # Não há um número de instâncias suficiente
@@ -355,7 +358,10 @@ class ActiveLearningExperiment:
                         raise ValueError
 
                 except ValueError:
-                    learner = ActiveLearner(**kwargs)
+                    learner = ActiveLearner(estimator=estimator,
+                                            query_strategy=qs,
+                                            X_training=X_training,
+                                            y_training=y_training)
 
                 learner_list.append(learner)
 
@@ -366,7 +372,10 @@ class ActiveLearningExperiment:
 
         else:
 
-            learner = ActiveLearner(query_strategy=qs, **kwargs)
+            learner = ActiveLearner(estimator=estimator,
+                                    query_strategy=qs,
+                                    X_training=X_training,
+                                    y_training=y_training)
             return learner
 
 

@@ -14,8 +14,6 @@ class MetaBaseBuilder(ActiveLearningExperiment):
             query_strategies: list,
             download_path):
 
-        print(self.labeled_index)
-
         l_X_pool = self.X_train[self.labeled_index]
         l_y_pool = self.y_train[self.labeled_index]
 
@@ -56,7 +54,7 @@ class MetaBaseBuilder(ActiveLearningExperiment):
             mfs['best_strategy'] = strategy_name
             mfs['best_score'] = score
 
-            print(mfs)
+            print(strategy_name, score, f'U:{np.size(u_y_pool)} L:{np.size(l_y_pool)}')
             # Incluindo meta-exemplo na metabase
             mfs.to_frame().T.to_csv(csv_path, mode='a',
                                     header=(not os.path.exists(csv_path)))
@@ -75,25 +73,23 @@ if __name__ == '__main__':
     from modAL.uncertainty import margin_sampling
     from modAL.disagreement import consensus_entropy_sampling
     from expected_error import expected_error_reduction
-    from information_density import density_weighted_sampling
+    from information_density import (density_weighted_sampling,
+                                     training_utility_sampling)
 
-    pd.set_option('display.max_colwidth', None)
-
-    query_strategies = [density_weighted_sampling,
-                        margin_sampling,
-                        consensus_entropy_sampling,
-                        expected_error_reduction]
+    query_strategies = [
+        training_utility_sampling,
+        density_weighted_sampling,
+        margin_sampling,
+        consensus_entropy_sampling,
+        expected_error_reduction]
 
     builder = MetaBaseBuilder(
         dataset_id=40,
         initial_labeled_size=5,
-        n_queries=1,
-        batch_size=5,
+        n_queries=100,
+        batch_size=1,
         random_state=42)
 
     builder.run(estimator=KNeighborsClassifier(),
                 download_path='.',
                 query_strategies=query_strategies)
-
-
-    
