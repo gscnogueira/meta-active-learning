@@ -75,11 +75,11 @@ if __name__ == '__main__':
     from modAL.uncertainty import margin_sampling
     from modAL.disagreement import consensus_entropy_sampling
     from expected_error import expected_error_reduction
-    from information_density import density_weighted
+    from information_density import density_weighted_sampling
 
     pd.set_option('display.max_colwidth', None)
 
-    query_strategies = [density_weighted,
+    query_strategies = [density_weighted_sampling,
                         margin_sampling,
                         consensus_entropy_sampling,
                         expected_error_reduction]
@@ -87,7 +87,7 @@ if __name__ == '__main__':
     builder = MetaBaseBuilder(
         dataset_id=40,
         initial_labeled_size=5,
-        n_queries=3,
+        n_queries=1,
         batch_size=5,
         random_state=42)
 
