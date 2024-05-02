@@ -15,7 +15,7 @@ from modAL.utils.data import (add_row, data_shape, data_vstack, drop_rows,
 from modAL.utils.selection import multi_argmin, shuffled_argmin
 
 
-def expected_error_reduction(learner: ActiveLearner, X: modALinput, loss: str = 'binary',
+def expected_error_reduction(learner: ActiveLearner, X: modALinput, loss: str = 'log',
                              p_subsample: float = 1.0, n_instances: int = 1,
                              random_tie_break: bool = False) -> np.ndarray:
     """

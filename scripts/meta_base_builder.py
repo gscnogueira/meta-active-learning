@@ -79,7 +79,6 @@ if __name__ == '__main__':
 
     pd.set_option('display.max_colwidth', None)
 
-    # TODO setar log loss como parâmetro em EER
     query_strategies = [density_weighted,
                         margin_sampling,
                         consensus_entropy_sampling,
