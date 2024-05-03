@@ -62,9 +62,9 @@ def test_dataset(dataset_id):
                            cv=skf,
                            error_score='raise')
     except Exception:
-        return dataset_id
+        return None
 
-    return None
+    return dataset_id
 
 if __name__ == '__main__':
 
@@ -80,7 +80,12 @@ if __name__ == '__main__':
             id for id in tqdm(pool.imap_unordered(test_dataset, dataset_ids))
             if id is not None]
 
+    print(filtered_ids)
+
+    import pdb; pdb.set_trace()
+
     random.seed(42)
+
 
     selected_ids = sorted(random.sample(filtered_ids, N_DATASETS))
 
