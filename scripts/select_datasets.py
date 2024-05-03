@@ -80,12 +80,7 @@ if __name__ == '__main__':
             id for id in tqdm(pool.imap_unordered(test_dataset, dataset_ids))
             if id is not None]
 
-    print(filtered_ids)
-
-    import pdb; pdb.set_trace()
-
     random.seed(42)
-
 
     selected_ids = sorted(random.sample(filtered_ids, N_DATASETS))
 
