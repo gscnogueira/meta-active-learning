@@ -37,7 +37,6 @@ def get_dataset_ids(max_number_of_instances=10000,
 
 def test_dataset(dataset_id):
 
-    print('Iniciando para', dataset_id)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         dataset = openml.datasets.get_dataset(dataset_id)
@@ -63,10 +62,9 @@ def test_dataset(dataset_id):
                            cv=skf,
                            error_score='raise')
     except Exception:
-        return True
+        return dataset_id
 
-    print('Fim para', dataset_id)
-    return False
+    return None
 
 if __name__ == '__main__':
 
@@ -74,12 +72,17 @@ if __name__ == '__main__':
 
     dataset_ids = get_dataset_ids()
 
+    print(f'Foram encontrados {len(dataset_ids)} conjuntos de dados')
+    print('Iniciando testes...')
+
     with Pool() as pool:
-        results = pool.map(test_dataset, dataset_ids)
+        filtered_ids = [
+            id for id in tqdm(pool.imap_unordered(test_dataset, dataset_ids))
+            if id is not None]
 
     random.seed(42)
 
-    selected_ids = sorted(random.sample(dataset_ids, N_DATASETS))
+    selected_ids = sorted(random.sample(filtered_ids, N_DATASETS))
 
     with open('selected_dataset_ids.txt', 'w') as arquivo:
         for id in selected_ids:
