@@ -1,6 +1,6 @@
 from functools import partial
 from itertools import product
-from multiprocessing import Pool
+from multiprocessing import Pool, get_context
 import logging
 import os
 
@@ -8,10 +8,6 @@ import os
 from meta_base_builder import MetaBaseBuilder
 
 DOWNLOAD_PATH = 'metabase/'
-
-
-
-
 
 def gen_metabase(dataset_id,
                  estimator,
@@ -62,7 +58,6 @@ if __name__ == '__main__':
     from sklearn.tree import DecisionTreeClassifier
     from sklearn.naive_bayes import GaussianNB
     from modAL.uncertainty import margin_sampling
-    from modAL.disagreement import consensus_entropy_sampling
 
     from expected_error import expected_error_reduction
     from information_density import (density_weighted_sampling,
@@ -78,12 +73,12 @@ if __name__ == '__main__':
 
     clf_list = [
         # SVCLinear(kernel='linear', probability=True),
-        SVC(probability=True),
+        # SVC(probability=True),
         # RandomForestClassifier(),
         KNeighborsClassifier(),
         # MLPClassifier(),
         # LogisticRegression(),
-        # DecisionTreeClassifier(),
+        DecisionTreeClassifier(),
         GaussianNB()
     ]
 
@@ -91,7 +86,6 @@ if __name__ == '__main__':
         training_utility_sampling,
         density_weighted_sampling,
         margin_sampling,
-        consensus_entropy_sampling,
         expected_error_reduction
     ]
 
@@ -103,10 +97,15 @@ if __name__ == '__main__':
         batch_size=1,
         random_state=42)
 
-    def func(args):
-        return gen_metabase_partial(*args)
+    import time
 
-    with Pool() as p:
-        p.map(func,
-              product(dataset_ids, clf_list))
+    t = time.time()
 
+    with get_context("fork").Pool() as p:
+        p.starmap(gen_metabase_partial,
+                  product(dataset_ids, clf_list),
+                  chunksize=10)
+
+    t = time.time() - t
+
+    print(f'Done in {t} seconds!')
