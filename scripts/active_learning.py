@@ -18,6 +18,15 @@ import openml
 from modAL import uncertainty as u, batch as b
 from modAL import disagreement as d
 
+from information_density import training_utility_sampling
+# Estratégias a serem utilizadas
+# - [X] Uncertainty Sampling
+# - [X] QBC
+# - [X] Expected Error Reduction (Accuracy/Entropy)
+# - [X] DW (Possível implementar com medida de densidade fornecida)
+# - [ ] TU (Possível implementar com medida de densidade fornecida)
+
+
 class ActiveLearningExperiment:
 
     MAX_NUMBER_OF_CLASSES = 5
@@ -41,7 +50,8 @@ class ActiveLearningExperiment:
 
         X, y = self.__load_data(dataset_id)
 
-        X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y)
+        # TODO: verificar se os splits são sempre os mesmos toda vez que a classe é instanciada
+        X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, random_state=random_state)
 
         self.classes_ = np.unique(y)
 
@@ -50,6 +60,8 @@ class ActiveLearningExperiment:
             np.random.RandomState(random_state).choice(np.where(y_train == cls)[0])
             for cls in np.unique(y_train)]
 
+        # TODO: verificar se esse comportamento é viável, visto que
+        # adiciona mais informação à configuração inicial
         if (n_classes := len(labeled_index)) < initial_labeled_size:
 
             possible_choices = [i for i in range(len(y_train))
@@ -127,6 +139,18 @@ class ActiveLearningExperiment:
             marker_query=partial(self.__meta_sample_query,
                                  meta_model=meta_model),
             name='meta_sampling')
+
+    def _extract_mfs(self, X, y):
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore')
+            mfe = MFE(groups='all')
+            mfe.fit(X,y)
+            mf_names, mf_values = mfe.extract()
+
+        mfs = pd.Series(data=mf_values, index=mf_names)
+
+        return mfs
 
     def _extract_unsupervised_mfs(self, X):
 
@@ -276,28 +300,30 @@ class ActiveLearningExperiment:
                        query_strategies,
                        **kwargs):
 
-        args = dict()
-        args['estimator'] = estimator
-        args['X_training'], args['y_training'] = l_pool
-
-        active_learners = [self.__gen_learner(query_strategy=s, **args)
-                           for s in query_strategies]
-
         best_score = 0
         best_sample = None
         best_strategy = None
         u_X_pool, u_y_pool = u_pool
+        l_X_pool, l_y_pool = l_pool
 
         u_pool_size = np.size(u_y_pool)
 
-        for i, learner in enumerate(active_learners):
+        for qs in query_strategies:
 
+            # TODO: implementar condição de maneira menos grotesca
+            learner = self.__gen_learner(
+                estimator=estimator,
+                X_training=l_X_pool,
+                y_training=l_y_pool,
+                query_strategy=(qs if qs != training_utility_sampling
+                                else partial(qs, X_labeled=l_X_pool)))
+
+            # TODO: Analisar a viabilidade dessa query final
             query_index = (learner.query(u_X_pool)[0]
                            if u_pool_size > self.batch_size + 2
                            else np.arange(u_pool_size))
 
             learner.teach(X=u_X_pool[query_index], y=u_y_pool[query_index])
-
 
             y_pred = learner.predict(self.X_test)
             score = f1_score(self.y_test, y_pred, average='macro')
@@ -305,26 +331,25 @@ class ActiveLearningExperiment:
             if score > best_score:
                 best_score = score
                 best_sample = query_index
-                best_strategy = query_strategies[i]
+                best_strategy = qs
 
         return best_sample, best_score, best_strategy.__name__
 
-    def __gen_learner(self, query_strategy, **kwargs):
+    def __gen_learner(self, estimator, query_strategy, X_training, y_training):
 
         qs = partial(query_strategy, n_instances=self.batch_size)
 
-        if query_strategy in self.UNCERTAINTY_STRATEGIES:
-
-            learner = ActiveLearner(query_strategy=qs, **kwargs)
-            return learner
-
-        elif query_strategy in self.DISAGREEMENT_STRATEGIES:
+        if query_strategy in self.DISAGREEMENT_STRATEGIES:
 
             learner_list = []
 
             for _ in range(self.committee_size):
                 try:
-                    learner = ActiveLearner(bootstrap_init=True, **kwargs)
+                    learner = ActiveLearner(estimator=estimator,
+                                            query_strategy=qs,
+                                            X_training=X_training,
+                                            y_training=y_training,
+                                            bootstrap_init=True)
                     if not np.array_equal(self.classes_,
                                           learner.estimator.classes_):
                         # Não há um número de instâncias suficiente
@@ -333,7 +358,10 @@ class ActiveLearningExperiment:
                         raise ValueError
 
                 except ValueError:
-                    learner = ActiveLearner(**kwargs)
+                    learner = ActiveLearner(estimator=estimator,
+                                            query_strategy=qs,
+                                            X_training=X_training,
+                                            y_training=y_training)
 
                 learner_list.append(learner)
 
@@ -343,7 +371,12 @@ class ActiveLearningExperiment:
             return learner
 
         else:
-            raise ValueError("Estratégia de sampling não suportada")
+
+            learner = ActiveLearner(estimator=estimator,
+                                    query_strategy=qs,
+                                    X_training=X_training,
+                                    y_training=y_training)
+            return learner
 
 
     def __load_data(self, dataset_id):
@@ -391,62 +424,3 @@ class ActiveLearningExperiment:
         return best_clusterer
 
 
-class MetaBaseBuilder(ActiveLearningExperiment):
-
-
-    def run(self, estimator,
-            query_strategies: list,
-            download_path):
-
-        l_X_pool = self.X_train[self.labeled_index]
-        l_y_pool = self.y_train[self.labeled_index]
-
-        u_X_pool = np.delete(self.X_train, self.labeled_index, axis=0)
-        u_y_pool = np.delete(self.y_train, self.labeled_index, axis=0)
-
-        csv_path = os.path.join(download_path,
-                                str(self.dataset_id),
-                                f'{type(estimator).__name__}.csv')
-
-        for idx in range(self.n_queries):
-
-            u_pool_size = np.size(u_y_pool)
-
-            if u_pool_size <= 0:
-                break
-
-            # Extração de metafeatures dos dados não rotulados
-
-            # Extração de medidas não supervisionadas
-            uns_mfs = self._extract_unsupervised_mfs(u_X_pool)
-            clst_mfs = self._extract_clustering_mfs(u_X_pool)
-            mfs = pd.concat([uns_mfs, clst_mfs])
-
-            with warnings.catch_warnings():
-
-                warnings.filterwarnings("ignore", category=ConvergenceWarning)
-                query_index, score, strategy_name = self._topline_query(
-                    estimator=estimator,
-                    query_strategies=query_strategies,
-                    l_pool=(l_X_pool, l_y_pool),
-                    u_pool=(u_X_pool, u_y_pool),
-                    batch_size=5,
-                    committee_size=self.committee_size)
-
-            mfs['dataset_id'] = int(self.dataset_id)
-            mfs['query_number'] = idx
-            mfs['estimator'] = type(estimator).__name__
-            mfs['best_strategy'] = strategy_name
-            mfs['best_score'] = score
-
-            # Incluindo meta-exemplo na metabase
-            mfs.to_frame().T.to_csv(csv_path, mode='a',
-                                    header=(not os.path.exists(csv_path)))
-
-            new_X, new_y = u_X_pool[query_index], u_y_pool[query_index]
-
-            l_X_pool = np.append(l_X_pool, new_X, axis=0)
-            l_y_pool = np.append(l_y_pool, new_y, axis=0)
-
-            u_X_pool = np.delete(u_X_pool, query_index, axis=0)
-            u_y_pool = np.delete(u_y_pool, query_index, axis=0)
