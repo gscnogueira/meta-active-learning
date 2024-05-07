@@ -1,21 +1,46 @@
+from os import environ
+environ['OMP_NUM_THREADS'] = '1'
+
 from functools import partial
 from itertools import product
 from multiprocessing import Pool, get_context
 import logging
 import os
 
+import pandas as pd
+from tqdm import tqdm
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neural_network import MLPClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.naive_bayes import GaussianNB
+from modAL.uncertainty import margin_sampling
 
 from meta_base_builder import MetaBaseBuilder
+from expected_error import expected_error_reduction
+from information_density import (density_weighted_sampling,
+                                     training_utility_sampling)
 
 DOWNLOAD_PATH = 'metabase/'
 
-def gen_metabase(dataset_id,
-                 estimator,
+estimator_dict = {
+    "KNN": KNeighborsClassifier,
+    "GaussianNB": GaussianNB,
+    "DecisionTreeClassifier": DecisionTreeClassifier
+}
+
+def gen_metabase(args,
                  query_strategies,
                  random_state,
                  initial_labeled_size,
                  n_queries,
                  batch_size):
+
+    dataset_id, estimator_name = args
+
+    estimator = estimator_dict[estimator_name]()
 
     pid = os.getpid()
 
@@ -37,6 +62,12 @@ def gen_metabase(dataset_id,
         except FileExistsError:
             pass
 
+        csv_file_name = os.path.join(dir_path, f'{type(estimator).__name__}.csv' )
+        if os.path.exists(csv_file_name):
+            if pd.read_csv(csv_file_name)['query_number'].max() >= 99 :
+                logging.warning(f'[{context_string}] Metabase já havia sido gerada.')
+                return
+
         builder.run(estimator=estimator,
                     download_path=DOWNLOAD_PATH,
                     query_strategies=query_strategies)
@@ -50,18 +81,6 @@ def gen_metabase(dataset_id,
 
 if __name__ == '__main__':
 
-    from sklearn.svm import SVC
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.neighbors import KNeighborsClassifier
-    from sklearn.neural_network import MLPClassifier
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.tree import DecisionTreeClassifier
-    from sklearn.naive_bayes import GaussianNB
-    from modAL.uncertainty import margin_sampling
-
-    from expected_error import expected_error_reduction
-    from information_density import (density_weighted_sampling,
-                                     training_utility_sampling)
 
     class SVCLinear(SVC):
         pass
@@ -69,17 +88,12 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.WARNING,
                         format='%(asctime)s:%(levelname)s:%(message)s')
 
-    dataset_ids = {40, 41}
+    dataset_ids = [int(line) for line in open('selected_dataset_ids.txt')]
 
     clf_list = [
-        # SVCLinear(kernel='linear', probability=True),
-        # SVC(probability=True),
-        # RandomForestClassifier(),
-        KNeighborsClassifier(),
-        # MLPClassifier(),
-        # LogisticRegression(),
-        DecisionTreeClassifier(),
-        GaussianNB()
+        "KNN",
+        # "DecisionTreeClassifier" ,
+        # "GaussianNB"
     ]
 
     query_strategies = [
@@ -93,18 +107,22 @@ if __name__ == '__main__':
         gen_metabase,
         query_strategies=query_strategies,
         initial_labeled_size=5,
-        n_queries=10,
+        n_queries=100, # NAO ESQUECE DE MUDAR PRA 100 DE NOVO!!!!!!
         batch_size=1,
         random_state=42)
 
     import time
+    import sys
 
     t = time.time()
 
-    with get_context("fork").Pool() as p:
-        p.starmap(gen_metabase_partial,
-                  product(dataset_ids, clf_list),
-                  chunksize=10)
+    args = list(product(dataset_ids, clf_list))
+    n_workers = 48
+
+    with get_context("fork").Pool(n_workers) as p:
+        results = [e for e in tqdm(p.imap_unordered(gen_metabase_partial, args),
+                                   total=len(args),
+                                   file=sys.stdout)]
 
     t = time.time() - t
 
