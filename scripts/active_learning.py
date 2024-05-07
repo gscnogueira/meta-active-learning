@@ -15,31 +15,15 @@ import numpy as np
 import pandas as pd
 import openml
 
-from modAL import uncertainty as u, batch as b
-from modAL import disagreement as d
 
 from information_density import training_utility_sampling
-# Estratégias a serem utilizadas
-# - [X] Uncertainty Sampling
-# - [X] QBC
-# - [X] Expected Error Reduction (Accuracy/Entropy)
-# - [X] DW (Possível implementar com medida de densidade fornecida)
-# - [ ] TU (Possível implementar com medida de densidade fornecida)
+import config
 
 
 class ActiveLearningExperiment:
 
     MAX_NUMBER_OF_CLASSES = 5
 
-    DISAGREEMENT_STRATEGIES = [d.max_disagreement_sampling,
-                               d.vote_entropy_sampling,
-                               d.consensus_entropy_sampling] 
-
-    UNCERTAINTY_STRATEGIES = [u.uncertainty_sampling,
-                              u.margin_sampling,
-                              u.entropy_sampling,
-                              b.uncertainty_batch_sampling]
-    
     def __init__(self, dataset_id, initial_labeled_size, n_queries, batch_size,
                  committee_size=3, random_state=None):
 
@@ -50,7 +34,9 @@ class ActiveLearningExperiment:
 
         X, y = self.__load_data(dataset_id)
 
-        # TODO: verificar se os splits são sempre os mesmos toda vez que a classe é instanciada
+        # TODO: verificar se os splits são sempre os mesmos toda vez
+        # que a classe é instanciada
+
         X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, random_state=random_state)
 
         self.classes_ = np.unique(y)
@@ -79,6 +65,8 @@ class ActiveLearningExperiment:
         self.y_train, self.y_test = y_train, y_test
 
     def run(self, estimator, query_strategy):
+        if query_strategy == training_utility_sampling:
+            return self.run_training_utility(estimator)[0]
 
         l_X_pool = self.X_train[self.labeled_index]
         l_y_pool = self.y_train[self.labeled_index]
@@ -93,12 +81,7 @@ class ActiveLearningExperiment:
         args['query_strategy'] = partial(query_strategy,
                                          n_instances=self.batch_size)
 
-        if query_strategy.__module__ == 'modAL.uncertainty':
-            learner = ActiveLearner(**args)
-        else:
-            learner_list = [ActiveLearner(**args) for _ in range(self.committee_size)]
-            learner = Committee(learner_list=learner_list,
-                                query_strategy=args['query_strategy'])
+        learner = ActiveLearner(**args)
 
         scores = []
         for idx in tqdm(range(self.n_queries), desc=query_strategy.__name__):
@@ -140,42 +123,21 @@ class ActiveLearningExperiment:
                                  meta_model=meta_model),
             name='meta_sampling')
 
+    def run_training_utility(self, estimator):
+        return self.__run_marker(
+            estimator, [training_utility_sampling],
+            self._topline_query, name='training_utility_sampling')
+
     def _extract_mfs(self, X, y):
 
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore')
             mfe = MFE(groups='all')
-            mfe.fit(X,y)
-            mf_names, mf_values = mfe.extract()
-
-        mfs = pd.Series(data=mf_values, index=mf_names)
-
-        return mfs
-
-    def _extract_unsupervised_mfs(self, X):
-
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore')
-            mfe = MFE(groups='all')
-            mfe.fit(X)
-            mf_names, mf_values = mfe.extract()
-
-        mfs = pd.Series(data=mf_values, index=mf_names)
-        return mfs
-
-    def _extract_clustering_mfs(self, X):
-
-        clusterer = self.__get_best_cluster(X)
-
-        y = clusterer.labels_
-
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore')
-            mfe = MFE(groups='clustering')
             mfe.fit(X, y)
             mf_names, mf_values = mfe.extract()
 
         mfs = pd.Series(data=mf_values, index=mf_names)
+
         return mfs
 
     def __run_marker(self, estimator, query_strategies: list, marker_query, name=None):
@@ -222,34 +184,23 @@ class ActiveLearningExperiment:
                             meta_model,
                             **kwargs):
 
-        query_strategy_dict = {
-            'consensus_entropy_sampling': d.consensus_entropy_sampling,
-            'entropy_sampling': u.entropy_sampling,
-            'margin_sampling': u.margin_sampling,
-            'max_disagreement_sampling': d.max_disagreement_sampling,
-            'uncertainty_batch_sampling': b.uncertainty_batch_sampling,
-            'uncertainty_sampling': u.uncertainty_sampling,
-            'vote_entropy_sampling': d.vote_entropy_sampling
-        }
-
         l_X_pool, l_y_pool = l_pool
         u_X_pool, u_y_pool = u_pool
         u_pool_size = np.size(u_y_pool)
 
         # Extração de metafeatures
+        pymfe_mfs = self._extract_mfs(l_X_pool, l_y_pool)
+        query_number = pd.Series(data=[query_number], index=['query_number'])
 
-        # query_number = pd.Series(data=[query_number], index=['query_number'])
-        uns_mfs = self._extract_unsupervised_mfs(u_X_pool)
-        # clst_mfs = self._extract_clustering_mfs(u_X_pool)
-
-        mfs = pd.concat([uns_mfs])
-
+        mfs = pd.concat([query_number, pymfe_mfs])
         mfs.drop(labels='num_to_cat', inplace=True)
+
+        mfs.replace([np.inf, -np.inf], np.nan, inplace=True)
 
         X = [mfs.values]
 
         pred_strategy = meta_model.predict(X)[0]
-        query_strategy = query_strategy_dict[pred_strategy]
+        query_strategy = config.query_strategy_dict[pred_strategy]
 
         learner = self.__gen_learner(query_strategy=query_strategy,
                                      estimator=estimator,
@@ -315,8 +266,7 @@ class ActiveLearningExperiment:
                 estimator=estimator,
                 X_training=l_X_pool,
                 y_training=l_y_pool,
-                query_strategy=(qs if qs != training_utility_sampling
-                                else partial(qs, X_labeled=l_X_pool)))
+                query_strategy=qs)
 
             # TODO: Analisar a viabilidade dessa query final
             query_index = (learner.query(u_X_pool)[0]
@@ -337,46 +287,17 @@ class ActiveLearningExperiment:
 
     def __gen_learner(self, estimator, query_strategy, X_training, y_training):
 
-        qs = partial(query_strategy, n_instances=self.batch_size)
-
-        if query_strategy in self.DISAGREEMENT_STRATEGIES:
-
-            learner_list = []
-
-            for _ in range(self.committee_size):
-                try:
-                    learner = ActiveLearner(estimator=estimator,
-                                            query_strategy=qs,
-                                            X_training=X_training,
-                                            y_training=y_training,
-                                            bootstrap_init=True)
-                    if not np.array_equal(self.classes_,
-                                          learner.estimator.classes_):
-                        # Não há um número de instâncias suficiente
-                        # para o uso de bootstrap. Portanto,  o procedimento
-                        # padrão será realizado
-                        raise ValueError
-
-                except ValueError:
-                    learner = ActiveLearner(estimator=estimator,
-                                            query_strategy=qs,
-                                            X_training=X_training,
-                                            y_training=y_training)
-
-                learner_list.append(learner)
-
-            learner = Committee(learner_list=learner_list,
-                                query_strategy=qs)
-
-            return learner
-
+        if query_strategy == training_utility_sampling:
+            qs = partial(query_strategy, n_instances=self.batch_size,
+                         X_labeled=X_training)
         else:
+            qs = partial(query_strategy, n_instances=self.batch_size)
 
-            learner = ActiveLearner(estimator=estimator,
-                                    query_strategy=qs,
-                                    X_training=X_training,
-                                    y_training=y_training)
-            return learner
+        learner = ActiveLearner(estimator=estimator,
+                                query_strategy=qs,
+                                X_training=X_training,
+                                y_training=y_training)
+        return learner
 
 
     def __load_data(self, dataset_id):
