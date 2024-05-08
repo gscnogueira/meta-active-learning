@@ -84,7 +84,7 @@ class ActiveLearningExperiment:
         learner = ActiveLearner(**args)
 
         scores = []
-        for idx in tqdm(range(self.n_queries), desc=query_strategy.__name__):
+        for idx in range(self.n_queries):
 
             u_pool_size = np.size(u_y_pool)
 
@@ -151,7 +151,7 @@ class ActiveLearningExperiment:
         scores = []
         choices = []
 
-        for idx in tqdm(range(self.n_queries), desc=name):
+        for idx in range(self.n_queries):
 
             u_pool_size = np.size(u_y_pool)
 
