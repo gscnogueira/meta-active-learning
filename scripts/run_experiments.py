@@ -1,6 +1,5 @@
 import os
-import warnings
-import pickle as pkl
+from functools import partial
 
 from sklearn.impute import SimpleImputer
 from sklearn.ensemble import RandomForestClassifier
@@ -11,7 +10,6 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.model_selection import LeaveOneOut
 import pandas as pd
 import numpy as np
-from modAL import uncertainty as u, disagreement as d, batch as b
 from tqdm import tqdm
 
 from active_learning import ActiveLearningExperiment
@@ -61,9 +59,11 @@ def gen_meta_base(data_path, estimator):
 
 
 def preprocess_meta_base(meta_base: pd.DataFrame) -> pd.DataFrame:
-
     # substitui valores infinitos com nan
     processed_meta_base = meta_base.replace([np.inf, -np.inf], np.nan)
+
+    # Remove mfts que apresentas valor NaN em todos os conjuntos
+    processed_meta_base.drop(columns=['num_to_cat'], inplace=True)
 
     return processed_meta_base
 
@@ -91,11 +91,9 @@ def gen_meta_model(X_train, y_train):
     return meta_model
 
 
-def run_experiment(estimator, train_data, test_data, initial_labeled_size,
-                   n_queries, batch_size, random_state, **kwargs):
-
-    X_train, y_train = split_train_data(meta_base, train_data)
-    test_data_id = int(test_data[0])
+def run_experiment(estimator, X_train, y_train, test_data_id,
+                   initial_labeled_size, n_queries, batch_size, random_state,
+                   **kwargs):
 
     print('Conjunto de Teste:', test_data_id)
 
@@ -107,7 +105,9 @@ def run_experiment(estimator, train_data, test_data, initial_labeled_size,
                                    batch_size=BATCH_SIZE,
                                    random_state=RANDOM_STATE)
 
-    print('Conjunto de treino:', exp.X_train.shape, f'[|L| = {len(exp.labeled_index)}]')
+    print('Conjunto de treino:', exp.X_train.shape,
+          f'[|L| = {len(exp.labeled_index)}]')
+
     print('Conjunto de teste:', exp.X_test.shape)
 
     metrics_dict = dict()
@@ -128,18 +128,25 @@ def run_experiment(estimator, train_data, test_data, initial_labeled_size,
     return metrics_dict
 
 
-def run_split(train_data, test_data):
+def run_split(meta_base, split):
+
+    train_data_ids, test_data_id = split
+
+
     download_path = os.path.join('results', ESTIMATOR.__name__)
-    csv_file = os.path.join(download_path, f'{test_data[0]}.csv')
+    csv_file = os.path.join(download_path, f'{test_data_id}.csv')
 
     try:
         os.mkdir(download_path)
     except FileExistsError:
         pass
 
+    X_train, y_train = split_train_data(meta_base, train_data_ids)
+
     metrics = run_experiment(
-        train_data=train_data,
-        test_data=test_data,
+        X_train=X_train,
+        y_train=y_train,
+        test_data_id=test_data_id,
         estimator=ESTIMATOR,
         initial_labeled_size=N_LABELED_START,
         n_queries=N_QUERIES,
@@ -156,24 +163,19 @@ if __name__ == '__main__':
     BATCH_SIZE = 1
     N_LABELED_START = 5
     RANDOM_STATE = 42
-    N_QUERIES = 100
+    N_QUERIES = 10  # NAO ESQUECE DE MUDAR PARA 100 DEPOIS
 
     ESTIMATOR = GaussianNB
 
     meta_base = gen_meta_base(DATA_DIR, ESTIMATOR)
 
-    # Remove mfts que apresentas valor NaN em todos os conjuntos
-    meta_base.drop(columns=['num_to_cat'], inplace=True)
-
     meta_base = preprocess_meta_base(meta_base)
 
+    loo = LeaveOneOut()
     dataset_ids = meta_base.index.levels[0]
 
-    loo = LeaveOneOut()
+    splits = [(dataset_ids[train_index], int(dataset_ids[test_index][0]))
+              for train_index, test_index in loo.split(dataset_ids)]
 
-    train_index, test_index = next(loo.split(dataset_ids))
-
-    train_data = dataset_ids[train_index]
-    test_data = dataset_ids[test_index]
-
-    run_split(train_data, test_data)
+    for split in tqdm(splits):
+        run_split(meta_base, split)
