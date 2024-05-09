@@ -1,0 +1,11 @@
+,random_sampling,training_utility_sampling,density_weighted_sampling,margin_sampling,expected_error_reduction,random_meta_sampling,random_sampling_choice,perfect_meta_sampling,perfect_sampling_choice,meta_sampling,meta_sampling_choice
+0,0.9769542772861357,0.9769542772861357,0.9093848663188316,0.9709217795870893,0.9943945559927803,0.9709217795870893,margin_sampling,0.9943945559927803,expected_error_reduction,0.9769542772861357,training_utility_sampling
+1,0.9769542772861357,0.9769542772861357,0.9584786580302276,0.9943945559927803,1.0,0.9943945559927803,margin_sampling,1.0,density_weighted_sampling,0.9769542772861357,training_utility_sampling
+2,0.9769542772861357,0.9769542772861357,0.9890824926852702,1.0,1.0,0.9943945559927803,training_utility_sampling,1.0,density_weighted_sampling,0.9769542772861357,training_utility_sampling
+3,0.9769542772861357,0.9769542772861357,1.0,1.0,1.0,1.0,expected_error_reduction,1.0,density_weighted_sampling,0.9769542772861357,training_utility_sampling
+4,0.9828749529061205,0.9769542772861357,1.0,1.0,1.0,1.0,density_weighted_sampling,1.0,margin_sampling,0.9769542772861357,training_utility_sampling
+5,0.9828749529061205,0.9769542772861357,1.0,1.0,1.0,1.0,expected_error_reduction,1.0,training_utility_sampling,0.9769542772861357,training_utility_sampling
+6,0.9769542772861357,0.9769542772861357,0.9769542772861357,1.0,1.0,1.0,margin_sampling,1.0,training_utility_sampling,0.9769542772861357,training_utility_sampling
+7,0.9769542772861357,0.9769542772861357,0.9769542772861357,1.0,1.0,1.0,density_weighted_sampling,1.0,training_utility_sampling,0.9769542772861357,training_utility_sampling
+8,0.9769542772861357,0.9769542772861357,0.9769542772861357,1.0,1.0,1.0,margin_sampling,1.0,training_utility_sampling,0.9769542772861357,training_utility_sampling
+9,0.9769542772861357,0.9709217795870893,0.9769542772861357,1.0,1.0,1.0,expected_error_reduction,1.0,training_utility_sampling,0.9709217795870893,training_utility_sampling
