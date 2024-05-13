@@ -274,12 +274,11 @@ class ActiveLearningExperiment:
                        else np.arange(u_pool_size))
 
         learner.teach(X=u_X_pool[query_index], y=u_y_pool[query_index])
-        
+
         y_pred = learner.predict(self.X_test)
         score = f1_score(self.y_test, y_pred, average='macro')
 
         return query_index, score, query_strategy.__name__
-
 
     def _topline_query(self, estimator,
                        l_pool, u_pool,
@@ -334,7 +333,6 @@ class ActiveLearningExperiment:
                                 y_training=y_training)
         return learner
 
-
     def __load_data(self, dataset_id):
 
         with warnings.catch_warnings():
@@ -378,5 +376,3 @@ class ActiveLearningExperiment:
                 best_clusterer = clusterer
 
         return best_clusterer
-
-

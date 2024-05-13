@@ -98,7 +98,8 @@ def run_experiment(estimator, X_train, y_train, test_data_id,
                    initial_labeled_size, n_queries, batch_size, random_state,
                    **kwargs):
 
-    print(f'Dataset {test_data_id} iniciado ({os.getpid()})', flush=True)
+    context_string = f'({test_data_id}, {os.getpid()})'
+    print(context_string, 'Experimento iniciado.', flush=True)
 
     exp = ActiveLearningExperiment(dataset_id=test_data_id,
                                    initial_labeled_size=N_LABELED_START,
@@ -109,11 +110,13 @@ def run_experiment(estimator, X_train, y_train, test_data_id,
     metrics_dict = dict()
 
     # ESTRATÉGIAS CLASSICAS
-    # for strategy in [random_sampling] + config.query_strategies:
-    #     scores = exp.run(estimator=estimator(**kwargs), query_strategy=strategy)
-    #     metrics_dict[strategy.__name__] = scores
+    for strategy in [random_sampling] + config.query_strategies:
+        print(context_string, f'Rodando {strategy.__name__}', flush=True)
+        scores = exp.run(estimator=estimator(**kwargs), query_strategy=strategy)
+        metrics_dict[strategy.__name__] = scores
 
     # RANDOM META-SAMPLING
+    print(context_string, 'Rodando random_meta_sampling', flush=True)
     random_results = exp.run_baseline(estimator=estimator(**kwargs),
                                       query_strategies=config.query_strategies)
 
@@ -121,6 +124,7 @@ def run_experiment(estimator, X_train, y_train, test_data_id,
     metrics_dict['random_sampling_choice'] = random_results.choices
 
     # PERFECT META-SAMPLING
+    print(context_string, 'Rodando perfect_meta_sampling', flush=True)
     perfect_results = exp.run_topline(estimator=estimator(**kwargs),
                                       query_strategies=config.query_strategies)
 
@@ -128,6 +132,7 @@ def run_experiment(estimator, X_train, y_train, test_data_id,
     metrics_dict['perfect_sampling_choice'] = perfect_results.choices
 
     # META-SAMPLING
+    print(context_string, 'Rodando meta_sampling', flush=True)
     ms_results = exp.run_meta_query(estimator=estimator(**kwargs),
                                     meta_X=X_train, meta_y=y_train)
 
@@ -138,7 +143,7 @@ def run_experiment(estimator, X_train, y_train, test_data_id,
     metrics_dict['meta_sampling_choice'] = meta_sampling_real_choices
     metrics_dict['meta_sampling_ideal_choice'] = meta_sampling_ideal_choices
 
-    print(f'Dataset {test_data_id} finalizado ({os.getpid()})', flush=True)
+    print(context_string, 'Experimento finalizado.', flush=True)
 
     return metrics_dict
 
@@ -170,7 +175,6 @@ def run_split(meta_base, split):
     df = pd.DataFrame(metrics)
     df.to_csv(csv_file)
 
-
 if __name__ == '__main__':
 
     import sys
@@ -199,7 +203,7 @@ if __name__ == '__main__':
 
     run_split_partial = partial(run_split, meta_base)
 
-    run_split_partial(splits[1])
+    [run_split_partial(split) for split in splits[:3:2]]
 
     # with Pool(n_workers) as p:
         # results = [e for e in tqdm(p.imap_unordered(run_split_partial, splits),
