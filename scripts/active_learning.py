@@ -1,13 +1,15 @@
 import os
 import warnings
 from functools import partial
+from collections import namedtuple
 
-from tqdm import tqdm
-from modAL.models import ActiveLearner, Committee
+from modAL.models import ActiveLearner
+from sklearn.impute import SimpleImputer
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.cluster import KMeans
 from sklearn.compose import ColumnTransformer
-from sklearn.exceptions import ConvergenceWarning
 from sklearn.metrics import f1_score, silhouette_score
+from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder
 from pymfe.mfe import MFE
@@ -115,12 +117,13 @@ class ActiveLearningExperiment:
         return self.__run_marker(estimator, query_strategies,
                                  self.__baseline_query, name='random_meta_sampling')
 
-    def run_meta_query(self, estimator, meta_model):
+    def run_meta_query(self, estimator, meta_X, meta_y):
         return self.__run_marker(
             estimator=estimator,
             query_strategies=None,
             marker_query=partial(self.__meta_sample_query,
-                                 meta_model=meta_model),
+                                 meta_X=meta_X,
+                                 meta_y=meta_y),
             name='meta_sampling')
 
     def run_training_utility(self, estimator):
@@ -176,17 +179,38 @@ class ActiveLearningExperiment:
             u_X_pool = np.delete(u_X_pool, query_index, axis=0)
             u_y_pool = np.delete(u_y_pool, query_index, axis=0)
 
-        return scores, choices
+        Result = namedtuple('Result', 'scores choices' )
+        return Result(scores, choices)
+
+    def __gen_meta_model(self, X_train, y_train):
+
+        meta_model = Pipeline([
+            ('mean-inputer', SimpleImputer(missing_values=np.nan,
+                                           strategy='mean')),
+            ('meta-model', RandomForestClassifier())
+        ])
+
+        meta_model.fit(X_train.values, y_train)
+
+        return meta_model
 
     def __meta_sample_query(self, estimator,
                             l_pool, u_pool,
                             query_number,
-                            meta_model,
+                            meta_X, meta_y,
                             **kwargs):
 
         l_X_pool, l_y_pool = l_pool
         u_X_pool, u_y_pool = u_pool
         u_pool_size = np.size(u_y_pool)
+
+        print(meta_X.shape)
+        print(meta_y.shape)
+
+        print(f'Realizando query {query_number}')
+
+        # Geração de meta-modelo
+        meta_model = self.__gen_meta_model(meta_X, meta_y)
 
         # Extração de metafeatures
         pymfe_mfs = self._extract_mfs(l_X_pool, l_y_pool)
@@ -200,6 +224,13 @@ class ActiveLearningExperiment:
         X = [mfs.values]
 
         pred_strategy = meta_model.predict(X)[0]
+
+        *_, perfect_local_choice = self._topline_query(
+            estimator=estimator,
+            l_pool=l_pool,
+            u_pool=u_pool,
+            query_strategies=config.query_strategies)
+
         query_strategy = config.query_strategy_dict[pred_strategy]
 
         learner = self.__gen_learner(query_strategy=query_strategy,
@@ -216,7 +247,11 @@ class ActiveLearningExperiment:
         y_pred = learner.predict(self.X_test)
         score = f1_score(self.y_test, y_pred, average='macro')
 
-        return query_index, score, query_strategy.__name__
+        meta_X.loc[len(meta_X)] = mfs
+        meta_y[len(meta_y)] = perfect_local_choice
+
+        Choice = namedtuple('Choice', 'pred true')
+        return query_index, score, Choice(pred_strategy, perfect_local_choice)
 
     def __baseline_query(self, estimator,
                          l_pool, u_pool,
