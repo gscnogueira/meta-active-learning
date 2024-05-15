@@ -209,9 +209,9 @@ class ActiveLearningExperiment:
 
         # Extração de metafeatures
         pymfe_mfs = self._extract_mfs(l_X_pool, l_y_pool)
-        query_number = pd.Series(data=[query_number], index=['query_number'])
+        query_number_mf = pd.Series(data=[query_number], index=['query_number'])
 
-        mfs = pd.concat([query_number, pymfe_mfs])
+        mfs = pd.concat([query_number_mf, pymfe_mfs])
         mfs.drop(labels='num_to_cat', inplace=True)
 
         mfs.replace([np.inf, -np.inf], np.nan, inplace=True)
