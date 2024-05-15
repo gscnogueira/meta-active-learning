@@ -1,5 +1,5 @@
 from os import environ
-environ['OMP_NUM_THREADS'] = '1'
+# environ['OMP_NUM_THREADS'] = '1'
 
 import os
 from functools import partial
@@ -185,7 +185,7 @@ if __name__ == '__main__':
     BATCH_SIZE = 1
     N_LABELED_START = 5
     RANDOM_STATE = 42
-    N_QUERIES = 10  # MUDAR DEPOIS
+    N_QUERIES = 100 
 
     ESTIMATOR = GaussianNB
 
@@ -199,13 +199,11 @@ if __name__ == '__main__':
     splits = [(dataset_ids[train_index], int(dataset_ids[test_index][0]))
               for train_index, test_index in loo.split(dataset_ids)]
 
-    n_workers = 1  # MUDAR DEPOIS
+    n_workers = 48  
 
     run_split_partial = partial(run_split, meta_base)
 
-    [run_split_partial(split) for split in splits[:3:2]]
-
-    # with Pool(n_workers) as p:
-        # results = [e for e in tqdm(p.imap_unordered(run_split_partial, splits),
-                                   # total=len(splits),
-                                   # file=sys.stdout)]
+    with Pool(n_workers) as p:
+        results = [e for e in tqdm(p.imap_unordered(run_split_partial, splits),
+            total=len(splits),
+            file=sys.stdout)]
