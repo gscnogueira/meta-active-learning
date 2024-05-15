@@ -204,11 +204,6 @@ class ActiveLearningExperiment:
         u_X_pool, u_y_pool = u_pool
         u_pool_size = np.size(u_y_pool)
 
-        print(meta_X.shape)
-        print(meta_y.shape)
-
-        print(f'Realizando query {query_number}')
-
         # Geração de meta-modelo
         meta_model = self.__gen_meta_model(meta_X, meta_y)
 
@@ -247,8 +242,9 @@ class ActiveLearningExperiment:
         y_pred = learner.predict(self.X_test)
         score = f1_score(self.y_test, y_pred, average='macro')
 
-        meta_X.loc[len(meta_X)] = mfs
-        meta_y[len(meta_y)] = perfect_local_choice
+        if query_number < 10:
+            meta_X.loc[len(meta_X)] = mfs
+            meta_y[len(meta_y)] = perfect_local_choice
 
         Choice = namedtuple('Choice', 'pred true')
         return query_index, score, Choice(pred_strategy, perfect_local_choice)
