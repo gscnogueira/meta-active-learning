@@ -331,23 +331,18 @@ class ActiveLearningExperiment:
 
     def __load_data(self, dataset_id):
 
-        import arff
+        from scipy.io import arff
 
         with open(dataset_id) as f:
-            arff_file = arff.load(f)
+            data, meta = arff.loadarff(f)
 
-        data = np.array(arff_file['data'])
-        attributes = arff_file['attributes']
+        df = pd.DataFrame(data)
+        X, y = df.iloc[:, :-1], df.iloc[:, -1]
 
-        X, y = data[:, :-1], data[:, -1]
-
-        print(attributes[-1])
-
-        categorical_indicator = [isinstance(tipo, list)
-                                 for nome, tipo in attributes[:-1]]
+        cat_indicator = [dtype == 'nominal' for dtype in meta.types()][:-1]
 
         encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
-        transformers = [('one-hot-encoder', encoder, categorical_indicator)]
+        transformers = [('one-hot-encoder', encoder, cat_indicator)]
 
         preprocessor = ColumnTransformer(transformers, remainder='passthrough')
 

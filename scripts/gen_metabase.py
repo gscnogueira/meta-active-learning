@@ -1,44 +1,41 @@
 from os import environ
 # environ['OMP_NUM_THREADS'] = '1'
 
+import time
+import sys
 from functools import partial
-from itertools import product
 from multiprocessing import Pool, get_context
 import logging
 import os
 
-import pandas as pd
 from tqdm import tqdm
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.neural_network import MLPClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.tree import DecisionTreeClassifier
 from sklearn.naive_bayes import GaussianNB
 from modAL.uncertainty import margin_sampling
 
 from meta_base_builder import MetaBaseBuilder
 from expected_error import expected_error_reduction
 from information_density import (density_weighted_sampling,
-                                     training_utility_sampling)
+                                 training_utility_sampling)
 
-DOWNLOAD_PATH = 'metabase/'
+DOWNLOAD_PATH = '../metabase/'
 
 estimator_dict = {
     "KNN": KNeighborsClassifier,
     "GaussianNB": GaussianNB,
-    "DecisionTreeClassifier": DecisionTreeClassifier
+    "RandomForestClassifier": RandomForestClassifier,
+    "SVC": SVC,
 }
 
-def gen_metabase(args,
+def gen_metabase(dataset_id,
+                 estimator_name, 
                  query_strategies,
                  random_state,
                  initial_labeled_size,
                  n_queries,
                  batch_size):
-
-    dataset_id, estimator_name = args
 
     estimator = estimator_dict[estimator_name]()
 
@@ -62,12 +59,6 @@ def gen_metabase(args,
         except FileExistsError:
             pass
 
-        csv_file_name = os.path.join(dir_path, f'{type(estimator).__name__}.csv' )
-        if os.path.exists(csv_file_name):
-            if pd.read_csv(csv_file_name)['query_number'].max() >= 99 :
-                logging.warning(f'[{context_string}] Metabase já havia sido gerada.')
-                return
-
         builder.run(estimator=estimator,
                     download_path=DOWNLOAD_PATH,
                     query_strategies=query_strategies)
@@ -75,56 +66,43 @@ def gen_metabase(args,
         logging.warning(f'[{context_string}] Metabase construida.')
 
     except Exception as e:
-        raise e
         logging.error(f'[{context_string}] Ocorreu um erro: {e}')
 
 
 
 if __name__ == '__main__':
 
-
-    class SVCLinear(SVC):
-        pass
-
+    DATASETS_PATH = '../datasets'
     logging.basicConfig(level=logging.WARNING,
                         format='%(asctime)s:%(levelname)s:%(message)s')
 
-    dataset_ids = [int(line) for line in open('selected_dataset_ids.txt')]
-
-    clf_list = [
-        "KNN",
-        # "DecisionTreeClassifier" ,
-        # "GaussianNB"
-    ]
+    clf_list = ["KNN", "GaussianNB"]
 
     query_strategies = [
         training_utility_sampling,
         density_weighted_sampling,
         margin_sampling,
-        expected_error_reduction
-    ]
+        expected_error_reduction]
 
     gen_metabase_partial = partial(
         gen_metabase,
         query_strategies=query_strategies,
         initial_labeled_size=5,
-        n_queries=100, # NAO ESQUECE DE MUDAR PRA 100 DE NOVO!!!!!!
+        n_queries=10,  # NAO ESQUECE DE MUDAR PRA 100 DE NOVO!!!!!!
         batch_size=1,
         random_state=42)
 
-    import time
-    import sys
+    dataset_ids = list(os.path.join(DATASETS_PATH, f)
+                       for f in os.listdir(DATASETS_PATH))
 
-    t = time.time()
-
-    datasets_path = '../arff'
-    dataset_ids = (os.path.join(datasets_path, f)
-                   for f in os.listdir(datasets_path))
-
-    args = list(product(dataset_ids, clf_list))
     n_workers = 1  # MUDAR DEPOIS
 
-    gen_metabase_partial(args[0])
+    for estimator_name in clf_list:
+        t = time.time()
+        print(f'Iniciando Criação de metabase para {estimator_name}')
+        gen_metabase_partial(dataset_ids[1], estimator_name)
+        t = time.time() - t
+        print(f'{estimator_name}: Done in {t} seconds!')
 
     exit()
 
@@ -132,7 +110,3 @@ if __name__ == '__main__':
         results = [e for e in tqdm(p.imap_unordered(gen_metabase_partial, args),
                                    total=len(args),
                                    file=sys.stdout)]
-
-    t = time.time() - t
-
-    print(f'Done in {t} seconds!')
