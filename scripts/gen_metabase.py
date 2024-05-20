@@ -1,5 +1,5 @@
 from os import environ
-environ['OMP_NUM_THREADS'] = '1'
+# environ['OMP_NUM_THREADS'] = '1'
 
 from functools import partial
 from itertools import product
@@ -55,7 +55,7 @@ def gen_metabase(args,
                                   batch_size=batch_size,
                                   random_state=random_state)
 
-        dir_path = os.path.join(DOWNLOAD_PATH, str(dataset_id)) 
+        dir_path = os.path.join(DOWNLOAD_PATH, builder.dataset_id)
 
         try:
             os.mkdir(dir_path)
@@ -75,6 +75,7 @@ def gen_metabase(args,
         logging.warning(f'[{context_string}] Metabase construida.')
 
     except Exception as e:
+        raise e
         logging.error(f'[{context_string}] Ocorreu um erro: {e}')
 
 
@@ -116,8 +117,16 @@ if __name__ == '__main__':
 
     t = time.time()
 
+    datasets_path = '../arff'
+    dataset_ids = (os.path.join(datasets_path, f)
+                   for f in os.listdir(datasets_path))
+
     args = list(product(dataset_ids, clf_list))
-    n_workers = 48
+    n_workers = 1  # MUDAR DEPOIS
+
+    gen_metabase_partial(args[0])
+
+    exit()
 
     with get_context("fork").Pool(n_workers) as p:
         results = [e for e in tqdm(p.imap_unordered(gen_metabase_partial, args),

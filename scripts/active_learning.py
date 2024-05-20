@@ -31,15 +31,15 @@ class ActiveLearningExperiment:
 
         self.batch_size = batch_size
         self.committee_size = committee_size
-        self.dataset_id = dataset_id
+        self.dataset_id = os.path.basename(dataset_id)
         self.n_queries = n_queries
 
         X, y = self.__load_data(dataset_id)
 
         # TODO: verificar se os splits são sempre os mesmos toda vez
         # que a classe é instanciada
-
-        X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, random_state=random_state)
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, stratify=y, random_state=random_state)
 
         self.classes_ = np.unique(y)
 
@@ -48,12 +48,12 @@ class ActiveLearningExperiment:
             np.random.RandomState(random_state).choice(np.where(y_train == cls)[0])
             for cls in np.unique(y_train)]
 
-        # TODO: verificar se esse comportamento é viável, visto que
-        # adiciona mais informação à configuração inicial
+        # Adiciona novas instâncias caso o número de classes for menor
+        # que initial_labeled_size
         if (n_classes := len(labeled_index)) < initial_labeled_size:
 
             possible_choices = [i for i in range(len(y_train))
-                               if i not in labeled_index]
+                                if i not in labeled_index]
 
             additional_index = np.random.RandomState(random_state).choice(
                 possible_choices,
@@ -331,12 +331,20 @@ class ActiveLearningExperiment:
 
     def __load_data(self, dataset_id):
 
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore')
-            dataset = openml.datasets.get_dataset(dataset_id)
+        import arff
 
-        X, y, categorical_indicator, _ = dataset.get_data(
-            target=dataset.default_target_attribute)
+        with open(dataset_id) as f:
+            arff_file = arff.load(f)
+
+        data = np.array(arff_file['data'])
+        attributes = arff_file['attributes']
+
+        X, y = data[:, :-1], data[:, -1]
+
+        print(attributes[-1])
+
+        categorical_indicator = [isinstance(tipo, list)
+                                 for nome, tipo in attributes[:-1]]
 
         encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
         transformers = [('one-hot-encoder', encoder, categorical_indicator)]
