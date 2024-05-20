@@ -1,0 +1,11 @@
+@relation data
+@attribute nclasses numeric
+@attribute nattributes numeric
+@attribute Uavg numeric
+@attribute nattsByUavg numeric
+@attribute nomCount numeric
+@attribute numCount numeric
+@attribute nomByNum numeric
+@attribute learner {NB,kNN,VFDT,SVM,C45,IELM}
+@attribute class {Clu,DWLUeuc,DWLoUeuc,DWTUeuc,DWTUmah,DWTUman,DWeuc,EERMent,Ent,Mar,Rnd,SGJS,SGcon,SGmaj,other}
+@data
