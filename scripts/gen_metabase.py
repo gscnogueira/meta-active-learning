@@ -29,6 +29,8 @@ estimator_dict = {
     "SVC": SVC,
 }
 
+ERROR_LIST = []
+
 def gen_metabase(dataset_id,
                  estimator_name, 
                  query_strategies,
@@ -66,6 +68,7 @@ def gen_metabase(dataset_id,
         logging.warning(f'[{context_string}] Metabase construida.')
 
     except Exception as e:
+        ERROR_LIST.append(dataset_id)
         logging.error(f'[{context_string}] Ocorreu um erro: {e}')
 
 
@@ -88,7 +91,7 @@ if __name__ == '__main__':
         gen_metabase,
         query_strategies=query_strategies,
         initial_labeled_size=5,
-        n_queries=10,  # NAO ESQUECE DE MUDAR PRA 100 DE NOVO!!!!!!
+        n_queries=2,  # NAO ESQUECE DE MUDAR PRA 100 DE NOVO!!!!!!
         batch_size=1,
         random_state=42)
 
@@ -100,9 +103,13 @@ if __name__ == '__main__':
     for estimator_name in clf_list:
         t = time.time()
         print(f'Iniciando Criação de metabase para {estimator_name}')
-        gen_metabase_partial(dataset_ids[1], estimator_name)
+        for d in tqdm(dataset_ids):
+            gen_metabase_partial(d, estimator_name)
         t = time.time() - t
         print(f'{estimator_name}: Done in {t} seconds!')
+        break
+
+    print(ERROR_LIST)
 
     exit()
 
