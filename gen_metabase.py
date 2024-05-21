@@ -68,34 +68,10 @@ def gen_metabase(dataset_id, estimator_name,
         logging.error(f'[{context_string}] Ocorreu um erro: {e}')
 
 
-def get_datasets(datasets_path, experiments_path):
-    """
-    Retorna conjuntos de dados a serem utilizasos no experimento.
-
-    Os arquivos ARFFs contidos no diretório datasets representam um
-    número maior de conjuntos do que os utilizados nos experimentos do
-    Davi. Dessa forma, essa função visa se utilizar dos dados
-    experimentais contidos na pasta CSV, para que seja possivel
-    filtrá-los
-    """
-
-    csv_name_pattern = r"(.*)-r\d-f\d-normalized-pool.arff.csv$"
-    file_names = [os.path.basename(f) for f in os.listdir(datasets_path)]
-
-    csv_names = {re.search(csv_name_pattern, file_name).group(1)
-                 for file_name in os.listdir(experiments_path)}
-
-    dataset_ids = [f_name for f_name in file_names
-                   if os.path.splitext(f_name)[0] in csv_names]
-
-    return dataset_ids
-
-
 if __name__ == '__main__':
 
     DATASETS_PATH = 'datasets/'
     DOWNLOAD_PATH = 'metabase/'
-    EXPERIMENTS_PATH = 'resultados_davi/'
     N_WORKERS = 1
 
     kwargs = {
