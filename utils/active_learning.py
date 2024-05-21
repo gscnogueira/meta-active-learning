@@ -133,9 +133,18 @@ class ActiveLearningExperiment:
 
     def _extract_mfs(self, X, y):
 
+        # Grupos de meta-features utilizadas
+        groups = [
+            "general",
+            "statistical",
+            "info-theory",
+            "model-based",
+            "landmarking"
+        ]
+                  
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore')
-            mfe = MFE(groups='all')
+            mfe = MFE(groups=groups)
             mfe.fit(X, y)
             mf_names, mf_values = mfe.extract()
 
