@@ -43,7 +43,7 @@ def gen_metabase(dataset_id, estimator_name,
     context_string = f'{os.path.basename(dataset_id)}, {estimator}, {pid}'
 
     try:
-        logging.warning(f'[{context_string}] Iniciando construção de metabase.')
+        # logging.warning(f'[{context_string}] Iniciando construção de metabase.')
 
         builder = MetaBaseBuilder(dataset_id=dataset_id,
                                   initial_labeled_size=initial_labeled_size,
@@ -62,7 +62,7 @@ def gen_metabase(dataset_id, estimator_name,
                     download_path=DOWNLOAD_PATH,
                     query_strategies=query_strategies)
 
-        logging.warning(f'[{context_string}] Metabase construida.')
+        # logging.warning(f'[{context_string}] Metabase construida.')
 
     except Exception as e:
         logging.error(f'[{context_string}] Ocorreu um erro: {e}')
@@ -96,12 +96,12 @@ if __name__ == '__main__':
     DATASETS_PATH = 'datasets/'
     DOWNLOAD_PATH = 'metabase/'
     EXPERIMENTS_PATH = 'resultados_davi/'
-    N_WORKERS = 8  # MUDAR DEPOIS
+    N_WORKERS = 1
 
     kwargs = {
         'query_strategies': config.query_strategies,
         'initial_labeled_size': 5,
-        'n_queries': 2,  # MUDAR DEPOIS
+        'n_queries': 100,
         'batch_size': 1,
         'random_state': 42
     }
@@ -109,8 +109,8 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.WARNING,
                         format='%(asctime)s:%(levelname)s:%(message)s')
 
-    dataset_ids = [os.path.join(DATASETS_PATH, f_name) for f_name in
-                   get_datasets(DATASETS_PATH, EXPERIMENTS_PATH)]
+    dataset_ids = [os.path.join(DATASETS_PATH, f'{filename.strip()}.arff')
+                   for filename in open('datasets.txt')]
 
     print(f'Foram encontrados {len(dataset_ids)} datasets.')
 
