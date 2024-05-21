@@ -17,10 +17,9 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from modAL.uncertainty import margin_sampling
 
-from meta_base_builder import MetaBaseBuilder
+from utils.meta_base_builder import MetaBaseBuilder
 import config
 
-DOWNLOAD_PATH = '../metabase/'
 
 estimator_dict = {
     "KNN": KNeighborsClassifier,
@@ -94,14 +93,15 @@ def get_datasets(datasets_path, experiments_path):
 
 if __name__ == '__main__':
 
+    DATASETS_PATH = 'datasets/'
+    DOWNLOAD_PATH = 'metabase/'
+    EXPERIMENTS_PATH = 'resultados_davi/'
     N_WORKERS = 8  # MUDAR DEPOIS
-    DATASETS_PATH = '../datasets'
-    EXPERIMENTS_PATH = '../resultados_davi'
 
     kwargs = {
         'query_strategies': config.query_strategies,
         'initial_labeled_size': 5,
-        'n_queries': 100,
+        'n_queries': 2,  # MUDAR DEPOIS
         'batch_size': 1,
         'random_state': 42
     }
@@ -116,10 +116,8 @@ if __name__ == '__main__':
 
     for estimator_name in config.classifier_list:
 
-        print(f'Iniciando Criação de metabase para {estimator_name}')
-
-        gen_metabase_partial = partial(
-            gen_metabase, estimator_name=estimator_name, **kwargs)
+        gen_metabase_partial = partial(gen_metabase,
+                                       estimator_name=estimator_name, **kwargs)
 
         with get_context("fork").Pool(N_WORKERS) as p:
             generator = p.imap_unordered(gen_metabase_partial, dataset_ids)

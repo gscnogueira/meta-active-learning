@@ -1,7 +1,7 @@
 from modAL.uncertainty import margin_sampling
-from expected_error import expected_error_reduction
-from information_density import (density_weighted_sampling,
-                                 training_utility_sampling)
+from utils.expected_error import expected_error_reduction
+from utils.information_density import (density_weighted_sampling,
+                                       training_utility_sampling)
 
 classifier_list = ["KNN", "GaussianNB"]
 

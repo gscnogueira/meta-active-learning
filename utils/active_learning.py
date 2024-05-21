@@ -18,7 +18,7 @@ import pandas as pd
 import openml
 
 
-from information_density import training_utility_sampling
+from .information_density import training_utility_sampling
 import config
 
 

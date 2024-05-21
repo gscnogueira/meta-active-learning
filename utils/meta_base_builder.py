@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from sklearn.exceptions import ConvergenceWarning
 
-from active_learning import ActiveLearningExperiment
+from .active_learning import ActiveLearningExperiment
 
 
 class MetaBaseBuilder(ActiveLearningExperiment):
