@@ -21,7 +21,7 @@ class MetaBaseBuilder(ActiveLearningExperiment):
         u_y_pool = np.delete(self.y_train, self.labeled_index, axis=0)
 
         csv_path = os.path.join(download_path,
-                                str(self.dataset_id),
+                                self.dataset_id,
                                 f'{type(estimator).__name__}.csv')
 
         for idx in range(self.n_queries):
@@ -48,7 +48,7 @@ class MetaBaseBuilder(ActiveLearningExperiment):
                     batch_size=5,
                     committee_size=self.committee_size)
 
-            mfs['dataset_id'] = int(self.dataset_id)
+            mfs['dataset_id'] = self.dataset_id
             mfs['query_number'] = idx
             mfs['estimator'] = type(estimator).__name__
             mfs['best_strategy'] = strategy_name
