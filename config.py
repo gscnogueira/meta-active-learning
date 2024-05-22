@@ -4,7 +4,7 @@ from utils.information_density import (density_weighted_sampling,
                                        training_utility_sampling)
 
 classifier_list = [
-        # "KNN",
+        "KNN",
         "GaussianNB",
         "RandomForestClassifier",
         "SVC"
