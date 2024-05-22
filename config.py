@@ -3,7 +3,12 @@ from utils.expected_error import expected_error_reduction
 from utils.information_density import (density_weighted_sampling,
                                        training_utility_sampling)
 
-classifier_list = ["KNN", "GaussianNB"]
+classifier_list = [
+        # "KNN",
+        "GaussianNB",
+        "RandomForestClassifier",
+        "SVC"
+        ]
 
 query_strategies = [
     training_utility_sampling,
