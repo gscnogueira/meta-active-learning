@@ -86,7 +86,7 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.WARNING,
                         format='%(asctime)s:%(levelname)s:%(message)s')
 
-    dataset_list  = ['iris', 'lymphography', 'hepatitis', 'robot-failure-lp5']
+    dataset_list  = (d for d in open('datasets.txt'))
 
     dataset_files = [os.path.join(DATASETS_PATH, f'{filename.strip()}.arff')
                      for filename in dataset_list]
@@ -97,7 +97,7 @@ if __name__ == '__main__':
                                        estimator_name=estimator_name, **kwargs)
 
         with get_context("fork").Pool(N_WORKERS) as p:
-            generator = p.imap_unordered(gen_metabase_partial, dataset_ids)
+            generator = p.imap_unordered(gen_metabase_partial, dataset_files)
             pbar = tqdm(generator, total=len(dataset_files),
                         file=sys.stdout, desc=estimator_name)
             any(pbar)
