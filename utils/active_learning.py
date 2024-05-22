@@ -27,7 +27,7 @@ class ActiveLearningExperiment:
     MAX_NUMBER_OF_CLASSES = 5
 
     def __init__(self, dataset_id, initial_labeled_size, n_queries, batch_size,
-                 committee_size=3, random_state=None):
+                 committee_size=3, test_size=0.2, random_state=None):
 
         self.batch_size = batch_size
         self.committee_size = committee_size
@@ -39,7 +39,7 @@ class ActiveLearningExperiment:
         # TODO: verificar se os splits são sempre os mesmos toda vez
         # que a classe é instanciada
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, stratify=y, random_state=random_state)
+            X, y, test_size=test_size, stratify=y, random_state=random_state)
 
         self.classes_ = np.unique(y)
 
