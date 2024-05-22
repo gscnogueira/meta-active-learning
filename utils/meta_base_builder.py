@@ -21,8 +21,8 @@ class MetaBaseBuilder(ActiveLearningExperiment):
         u_y_pool = np.delete(self.y_train, self.labeled_index, axis=0)
 
         csv_path = os.path.join(download_path,
-                                self.dataset_id,
-                                f'{type(estimator).__name__}.csv')
+                                type(estimator).__name__ ,
+                                f'{self.dataset_id}.csv')
 
         for idx in range(self.n_queries):
 

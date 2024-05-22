@@ -51,7 +51,8 @@ def gen_metabase(dataset_id, estimator_name,
                                   batch_size=batch_size,
                                   random_state=random_state)
 
-        dir_path = os.path.join(DOWNLOAD_PATH, builder.dataset_id)
+        dir_path = os.path.join(DOWNLOAD_PATH,
+                                type(estimator).__name__)
 
         try:
             os.mkdir(dir_path)
@@ -72,7 +73,7 @@ if __name__ == '__main__':
 
     DATASETS_PATH = 'datasets/'
     DOWNLOAD_PATH = 'metabase/'
-    N_WORKERS = 1
+    N_WORKERS = 90
 
     kwargs = {
         'query_strategies': config.query_strategies,
@@ -85,10 +86,10 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.WARNING,
                         format='%(asctime)s:%(levelname)s:%(message)s')
 
-    dataset_ids = [os.path.join(DATASETS_PATH, f'{filename.strip()}.arff')
-                   for filename in open('datasets.txt')]
+    dataset_list  = ['iris', 'lymphography', 'hepatitis', 'robot-failure-lp5']
 
-    print(f'Foram encontrados {len(dataset_ids)} datasets.')
+    dataset_files = [os.path.join(DATASETS_PATH, f'{filename.strip()}.arff')
+                     for filename in dataset_list]
 
     for estimator_name in config.classifier_list:
 
@@ -97,6 +98,6 @@ if __name__ == '__main__':
 
         with get_context("fork").Pool(N_WORKERS) as p:
             generator = p.imap_unordered(gen_metabase_partial, dataset_ids)
-            pbar = tqdm(generator, total=len(dataset_ids),
+            pbar = tqdm(generator, total=len(dataset_files),
                         file=sys.stdout, desc=estimator_name)
             any(pbar)
