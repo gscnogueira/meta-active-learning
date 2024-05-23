@@ -1,5 +1,5 @@
 from os import environ
-# environ['OMP_NUM_THREADS'] = '1'
+environ['OMP_NUM_THREADS'] = '1'
 
 import os
 from functools import partial
@@ -15,7 +15,7 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 
-from active_learning import ActiveLearningExperiment
+from utils.active_learning import ActiveLearningExperiment
 import config
 
 
@@ -31,13 +31,13 @@ def gen_meta_base(data_path, estimator):
     dfs = []
     index_columns = ['dataset_id', 'query_number']
 
-    for root, _, files in os.walk(data_path):
-        file_path = f'{estimator.__name__}.csv'
+    metabase_path = os.path.join(data_path, estimator.__name__)
+    metabase_files = [f for f in os.listdir(metabase_path)]
 
-        if file_path not in files:
-            continue
+    for csv_file in os.listdir(metabase_path):
 
-        df = pd.read_csv(os.path.join(root, file_path))
+        df = pd.read_csv(os.path.join(metabase_path, csv_file), index_col=index_columns)
+
 
         # remove coluna sem nome gerada por bug no metabasebuilder
         df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
@@ -45,18 +45,15 @@ def gen_meta_base(data_path, estimator):
         # remove coluna que não é utilizada no treinemanto (por enquanto)
         df.drop(columns=['estimator'], inplace=True)
 
-        df.query_number = df.query_number.astype(int)
-        df.dataset_id = df.dataset_id.astype(int)
 
         dfs.append(df)
 
-    dfs_filtered = [df for df in dfs if df.query_number.max() == 99
+    dfs_filtered = [df for df in dfs if df.index.levels[1].max() == 99
                     and len(df) == 100]
 
     print(f'Foram identificadas {len(dfs_filtered)} bases uteis')
 
     final_df = pd.concat(dfs_filtered, join='inner')
-    final_df.set_index(index_columns, inplace=True)
 
     return final_df
 
@@ -109,6 +106,29 @@ def run_experiment(estimator, X_train, y_train, test_data_id,
 
     metrics_dict = dict()
 
+    # META-SAMPLING
+    print(context_string, 'Rodando meta_sampling', flush=True)
+    ms_results = exp.run_meta_query(estimator=estimator(**kwargs),
+                                    meta_X=X_train, meta_y=y_train)
+
+    metrics_dict['meta_sampling'] = ms_results.scores
+    meta_sampling_real_choices = [c.pred for c in ms_results.choices]
+    meta_sampling_ideal_choices = [c.true for c in ms_results.choices]
+
+    metrics_dict['meta_sampling_choice'] = meta_sampling_real_choices
+    metrics_dict['meta_sampling_ideal_choice'] = meta_sampling_ideal_choices
+
+    # PERFECT META-SAMPLING
+    print(context_string, 'Rodando perfect_meta_sampling', flush=True)
+    perfect_results = exp.run_topline(estimator=estimator(**kwargs),
+                                      query_strategies=config.query_strategies)
+
+    metrics_dict['perfect_meta_sampling'] = perfect_results.scores
+    metrics_dict['perfect_sampling_choice'] = perfect_results.choices
+
+
+    print(context_string, 'Experimento finalizado.', flush=True)
+
     # ESTRATÉGIAS CLASSICAS
     for strategy in [random_sampling] + config.query_strategies:
         print(context_string, f'Rodando {strategy.__name__}', flush=True)
@@ -123,27 +143,6 @@ def run_experiment(estimator, X_train, y_train, test_data_id,
     metrics_dict['random_meta_sampling'] = random_results.scores
     metrics_dict['random_sampling_choice'] = random_results.choices
 
-    # PERFECT META-SAMPLING
-    print(context_string, 'Rodando perfect_meta_sampling', flush=True)
-    perfect_results = exp.run_topline(estimator=estimator(**kwargs),
-                                      query_strategies=config.query_strategies)
-
-    metrics_dict['perfect_meta_sampling'] = perfect_results.scores
-    metrics_dict['perfect_sampling_choice'] = perfect_results.choices
-
-    # META-SAMPLING
-    print(context_string, 'Rodando meta_sampling', flush=True)
-    ms_results = exp.run_meta_query(estimator=estimator(**kwargs),
-                                    meta_X=X_train, meta_y=y_train)
-
-    metrics_dict['meta_sampling'] = ms_results.scores
-    meta_sampling_real_choices = [c.pred for c in ms_results.choices]
-    meta_sampling_ideal_choices = [c.true for c in ms_results.choices]
-
-    metrics_dict['meta_sampling_choice'] = meta_sampling_real_choices
-    metrics_dict['meta_sampling_ideal_choice'] = meta_sampling_ideal_choices
-
-    print(context_string, 'Experimento finalizado.', flush=True)
 
     return metrics_dict
 
@@ -181,27 +180,31 @@ if __name__ == '__main__':
     from multiprocessing import Pool
     from functools import partial
 
-    DATA_DIR = 'metabase/'
+    import config
+
     BATCH_SIZE = 1
     N_LABELED_START = 5
     RANDOM_STATE = 42
-    N_QUERIES = 100 
+    N_QUERIES = 5
+    N_WORKERS = 48  
+    ESTIMATOR = KNeighborsClassifier
 
-    ESTIMATOR = GaussianNB
-
-    meta_base = gen_meta_base(DATA_DIR, ESTIMATOR)
+    meta_base = gen_meta_base(config.METABASE_DATA_DIR, ESTIMATOR)
 
     meta_base = preprocess_meta_base(meta_base)
 
-    loo = LeaveOneOut()
     dataset_ids = meta_base.index.levels[0]
 
-    splits = [(dataset_ids[train_index], int(dataset_ids[test_index][0]))
+    loo = LeaveOneOut()
+    splits = [(dataset_ids[train_index], dataset_ids[test_index][0])
               for train_index, test_index in loo.split(dataset_ids)]
 
-    n_workers = 48  
 
     run_split_partial = partial(run_split, meta_base)
+
+    run_split_partial(splits[0])
+
+    exit()
 
     with Pool(n_workers) as p:
         results = [e for e in tqdm(p.imap_unordered(run_split_partial, splits),
