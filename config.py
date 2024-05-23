@@ -3,6 +3,9 @@ from utils.expected_error import expected_error_reduction
 from utils.information_density import (density_weighted_sampling,
                                        training_utility_sampling)
 
+DATASETS_DIR = 'datasets/'
+METABASE_DATA_DIR = 'metabase/'
+
 classifier_list = [
         "KNN",
         "GaussianNB",
