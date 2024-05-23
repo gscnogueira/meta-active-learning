@@ -342,7 +342,7 @@ class ActiveLearningExperiment:
 
         from scipy.io import arff
 
-        with open(dataset_id) as f:
+        with open(os.path.join(config.DATASETS_DIR, dataset_id)) as f:
             data, meta = arff.loadarff(f)
 
         df = pd.DataFrame(data)
