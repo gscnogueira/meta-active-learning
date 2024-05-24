@@ -126,15 +126,6 @@ def run_experiment(estimator, X_train, y_train, test_data_id,
     metrics_dict['perfect_meta_sampling'] = perfect_results.scores
     metrics_dict['perfect_sampling_choice'] = perfect_results.choices
 
-
-    print(context_string, 'Experimento finalizado.', flush=True)
-
-    # ESTRATÉGIAS CLASSICAS
-    for strategy in [random_sampling] + config.query_strategies:
-        print(context_string, f'Rodando {strategy.__name__}', flush=True)
-        scores = exp.run(estimator=estimator(**kwargs), query_strategy=strategy)
-        metrics_dict[strategy.__name__] = scores
-
     # RANDOM META-SAMPLING
     print(context_string, 'Rodando random_meta_sampling', flush=True)
     random_results = exp.run_baseline(estimator=estimator(**kwargs),
@@ -143,6 +134,13 @@ def run_experiment(estimator, X_train, y_train, test_data_id,
     metrics_dict['random_meta_sampling'] = random_results.scores
     metrics_dict['random_sampling_choice'] = random_results.choices
 
+    # ESTRATÉGIAS CLASSICAS
+    for strategy in [random_sampling] + config.query_strategies:
+        print(context_string, f'Rodando {strategy.__name__}', flush=True)
+        scores = exp.run(estimator=estimator(**kwargs), query_strategy=strategy)
+        metrics_dict[strategy.__name__] = scores
+
+    print(context_string, 'Experimento finalizado.', flush=True)
 
     return metrics_dict
 
@@ -182,12 +180,14 @@ if __name__ == '__main__':
 
     import config
 
+    N_WORKERS = 90
+    ESTIMATOR = KNeighborsClassifier
+
     BATCH_SIZE = 1
     N_LABELED_START = 5
     RANDOM_STATE = 42
-    N_QUERIES = 5
-    N_WORKERS = 48  
-    ESTIMATOR = KNeighborsClassifier
+    N_QUERIES = 100
+
 
     meta_base = gen_meta_base(config.METABASE_DATA_DIR, ESTIMATOR)
 
@@ -202,11 +202,7 @@ if __name__ == '__main__':
 
     run_split_partial = partial(run_split, meta_base)
 
-    run_split_partial(splits[0])
-
-    exit()
-
-    with Pool(n_workers) as p:
-        results = [e for e in tqdm(p.imap_unordered(run_split_partial, splits),
-            total=len(splits),
-            file=sys.stdout)]
+    with Pool(N_WORKERS) as p:
+        experiments_pool = p.imap_unordered(run_split_partial, splits)
+        pbar = tqdm(experiments_pool, total=len(splits), file=sys.stdout)
+        list(pbar)
