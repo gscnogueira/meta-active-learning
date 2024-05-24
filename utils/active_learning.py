@@ -251,10 +251,6 @@ class ActiveLearningExperiment:
         y_pred = learner.predict(self.X_test)
         score = f1_score(self.y_test, y_pred, average='macro')
 
-        if query_number < 10:
-            meta_X.loc[len(meta_X)] = mfs
-            meta_y[len(meta_y)] = perfect_local_choice
-
         Choice = namedtuple('Choice', 'pred true')
         return query_index, score, Choice(pred_strategy, perfect_local_choice)
 
